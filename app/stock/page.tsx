@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import AppHeader from '@/components/AppHeader';
-import CustomDatePicker from '@/components/CustomDatePicker';
+import SearchFilterBar from '@/components/SearchFilterBar';
 import DateNavigator from '@/components/DateNavigator';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
@@ -47,7 +47,7 @@ export default function StockPage() {
 
     return (
         <div className="flex flex-col min-h-screen bg-background-dashboard pb-24">
-            <AppHeader title="Stock & Inventory" />
+            <AppHeader title="Stock & Inventory" subtitle="Material Management" />
 
             {/* Sticky Controls Container */}
             <div className="sticky top-[68px] z-20 bg-background-dashboard pb-3 px-4 shadow-[0_4px_20px_-12px_rgba(0,0,0,0.1)]">
@@ -61,27 +61,14 @@ export default function StockPage() {
                 </div>
 
                 {/* Search & Filter Row */}
-                <div className="flex gap-2.5 mt-3">
-                    <div className="flex-1 relative">
-                        <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]">search</span>
-                        <input
-                            type="text"
-                            placeholder="Search stock..."
-                            value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
-                            className="w-full pl-10 pr-4 py-3 bg-white border border-gray-200 rounded-xl text-[13px] font-semibold text-gray-700 placeholder-gray-400 focus:outline-none focus:border-primary/50 transition-all shadow-sm"
-                        />
-                    </div>
-                    <button
-                        onClick={() => setShowFilters(!showFilters)}
-                        className={cn(
-                            "size-[46px] flex items-center justify-center rounded-xl border shadow-sm transition-colors shrink-0",
-                            showFilters ? "bg-primary border-primary text-white" : "bg-white border-gray-200 text-gray-500 hover:bg-gray-50"
-                        )}
-                    >
-                        <span className="material-symbols-outlined text-[22px]">filter_list</span>
-                    </button>
-                </div>
+                <SearchFilterBar
+                    className="mt-3"
+                    searchQuery={searchQuery}
+                    onSearchChange={setSearchQuery}
+                    placeholder="Search stock..."
+                    showFilters={showFilters}
+                    onToggleFilters={() => setShowFilters(!showFilters)}
+                />
 
                 {/* Filter Panel */}
                 {showFilters && (

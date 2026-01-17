@@ -35,10 +35,11 @@ export default function Home() {
 
       <AppHeader
         title="Production Overview"
+        subtitle="Live Plant Metrics"
       />
 
       {/* Persistent Date Navigator for Home Page */}
-      <div className="sticky top-[68px] z-20 bg-background-dashboard px-4 pb-2">
+      <div className="sticky top-[68px] z-20 bg-background-dashboard px-4 pb-2 pt-1">
         <DateNavigator
           currentDate={currentDate}
           setCurrentDate={setCurrentDate}

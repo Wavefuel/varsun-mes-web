@@ -28,7 +28,10 @@ export default function StockOrderPage() {
     const [actualOutput, setActualOutput] = useState(0);
     const [toolChanges, setToolChanges] = useState(0);
     const [rejects, setRejects] = useState(0);
+    const [actualStartTime, setActualStartTime] = useState("");
+    const [actualEndTime, setActualEndTime] = useState("");
     const [remarks, setRemarks] = useState("");
+    const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
     useEffect(() => {
         if (orderId) {
@@ -38,6 +41,8 @@ export default function StockOrderPage() {
                 setActualOutput(data.actualOutput || 0);
                 setToolChanges(data.toolChanges || 0);
                 setRejects(data.rejects || 0);
+                setActualStartTime(data.actualStartTime || data.startTime || "");
+                setActualEndTime(data.actualEndTime || data.endTime || "");
                 setRemarks(data.remarks || "");
             } else {
                 // If order not found, maybe show error but for now just redirect or stay
@@ -62,7 +67,8 @@ export default function StockOrderPage() {
 
     // Derived Values
     const target = order.target || 1; // Avoid division by zero
-    const efficiency = Math.min(Math.round((actualOutput / target) * 100), 100);
+    const efficiency = Math.round((actualOutput / target) * 100);
+    const visualEfficiency = Math.min(efficiency, 100);
     const progressPercent = Math.min((actualOutput / target) * 100, 100);
 
     const handleSave = () => {
@@ -71,6 +77,8 @@ export default function StockOrderPage() {
             actualOutput,
             toolChanges,
             rejects,
+            actualStartTime,
+            actualEndTime,
             remarks
         });
         toast.success("Order updated successfully");
@@ -104,15 +112,15 @@ export default function StockOrderPage() {
                 {/* 1. Key Order Info Card - Compact */}
                 <section>
                     <div className="grid grid-cols-3 gap-2">
-                        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-2 flex flex-col justify-center items-center text-center min-h-[64px]">
+                        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-2 flex flex-col justify-center items-start pl-3 min-h-[64px]">
                             <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 font-sans">Part Number</p>
-                            <p className="text-xs font-bold text-gray-800 leading-tight px-1 break-all font-sans">{order.partNumber}</p>
+                            <p className="text-xs font-bold text-gray-800 leading-tight break-all font-sans">{order.partNumber}</p>
                         </div>
-                        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-2 flex flex-col justify-center items-center text-center min-h-[64px]">
-                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 font-sans">Target</p>
-                            <p className="text-sm font-bold text-gray-800 leading-tight font-sans">{order.target} <span className="text-[9px] text-gray-400 font-normal font-sans">pcs</span></p>
+                        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-2 flex flex-col justify-center items-start pl-3 min-h-[64px]">
+                            <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 font-sans">Order ID</p>
+                            <p className="text-xs font-bold text-gray-800 leading-tight font-sans break-all">{order.id}</p>
                         </div>
-                        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-2 flex flex-col justify-center items-center text-center min-h-[64px]">
+                        <div className="bg-white rounded-lg border border-gray-100 shadow-sm p-2 flex flex-col justify-center items-start pl-3 min-h-[64px]">
                             <p className="text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5 font-sans">Date</p>
                             <p className="text-xs font-bold text-gray-800 leading-tight font-sans">
                                 {new Date(order.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -146,7 +154,7 @@ export default function StockOrderPage() {
                             <div className="relative size-14 flex-shrink-0">
                                 <div
                                     className="radial-progress absolute inset-0 rounded-full text-primary"
-                                    style={{ "--value": efficiency, "--size": "3.5rem", "--thickness": "4px" } as React.CSSProperties}
+                                    style={{ "--value": visualEfficiency, "--size": "3.5rem", "--thickness": "4px" } as React.CSSProperties}
                                 ></div>
                                 <div className="absolute inset-0 flex items-center justify-center">
                                     <span className="material-symbols-outlined text-primary text-[24px]">factory</span>
@@ -177,6 +185,28 @@ export default function StockOrderPage() {
                     </div>
 
                     <div className="p-4 space-y-5">
+                        {/* Actual Shift Timings */}
+                        <div className="grid grid-cols-2 gap-4">
+                            <div className="space-y-2">
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide font-sans">Actual Start</label>
+                                <input
+                                    type="time"
+                                    className="w-full h-10 bg-gray-50 border border-gray-200 rounded-lg px-3 text-xs font-bold text-gray-800 focus:ring-primary focus:border-primary font-sans"
+                                    value={actualStartTime}
+                                    onChange={(e) => setActualStartTime(e.target.value)}
+                                />
+                            </div>
+                            <div className="space-y-2">
+                                <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide font-sans">Actual End</label>
+                                <input
+                                    type="time"
+                                    className="w-full h-10 bg-gray-50 border border-gray-200 rounded-lg px-3 text-xs font-bold text-gray-800 focus:ring-primary focus:border-primary font-sans"
+                                    value={actualEndTime}
+                                    onChange={(e) => setActualEndTime(e.target.value)}
+                                />
+                            </div>
+                        </div>
+
                         {/* Actual Output */}
                         <div className="space-y-2">
                             <label className="block text-[10px] font-bold text-gray-500 uppercase tracking-wide font-sans">Actual Output (Good)</label>
@@ -270,6 +300,112 @@ export default function StockOrderPage() {
                             ></textarea>
                         </div>
                     </div>
+                </section>
+
+                {/* 4. Planned Order Details (Collapsible) */}
+                <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                    <button
+                        onClick={() => setIsDetailsOpen(!isDetailsOpen)}
+                        className="w-full bg-white px-4 py-3 border-b border-gray-100 flex justify-between items-center active:bg-gray-50 transition-colors"
+                    >
+                        <h3 className="font-bold text-[11px] uppercase tracking-wider text-primary font-sans">Planned Order Details</h3>
+                        <span className={`material-symbols-outlined text-gray-400 text-[20px] transition-transform duration-300 ${isDetailsOpen ? 'rotate-180' : ''}`}>
+                            expand_more
+                        </span>
+                    </button>
+
+                    {isDetailsOpen && (
+                        <div className="p-4 space-y-4 bg-white animate-in slide-in-from-top-2 duration-200">
+                            {/* Machine & Operator */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 font-sans">Machine</label>
+                                    <div className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-3 text-xs font-bold text-gray-600 font-sans truncate">
+                                        {order.machine}
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 font-sans">Operator</label>
+                                    <div className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-3 text-xs font-bold text-gray-600 font-sans truncate">
+                                        {order.operator}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Date & Shift */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 font-sans">Shift Date</label>
+                                    <div className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-3 text-xs font-bold text-gray-600 font-sans flex items-center justify-between">
+                                        <span>{new Date(order.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}</span>
+                                        <span className="material-symbols-outlined text-[16px] text-gray-400">calendar_today</span>
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 font-sans">Shift Work</label>
+                                    <div className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-3 text-xs font-bold text-gray-600 font-sans truncate">
+                                        {order.shift}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Code / Start / End */}
+                            <div className="flex gap-2 bg-primary/5 p-3 rounded-lg border border-primary/10">
+                                <div className="flex-1">
+                                    <p className="text-[9px] font-bold text-primary/60 uppercase font-sans">Code</p>
+                                    <p className="text-xs font-bold text-primary font-sans">{order.code}</p>
+                                </div>
+                                <div className="w-px bg-primary/20"></div>
+                                <div className="flex-1">
+                                    <p className="text-[9px] font-bold text-primary/60 uppercase font-sans">Start</p>
+                                    <p className="text-xs font-bold text-primary font-sans">{order.startTime}</p>
+                                </div>
+                                <div className="w-px bg-primary/20"></div>
+                                <div className="flex-1">
+                                    <p className="text-[9px] font-bold text-primary/60 uppercase font-sans">End</p>
+                                    <p className="text-xs font-bold text-primary font-sans">{order.endTime}</p>
+                                </div>
+                            </div>
+
+                            {/* Part & WO */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 font-sans">Part Number</label>
+                                    <div className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-3 text-xs font-bold text-gray-600 font-mono truncate">
+                                        {order.partNumber}
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 font-sans">Work Order</label>
+                                    <div className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-3 text-xs font-bold text-gray-600 font-mono truncate">
+                                        {order.id}
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Op / Batch / Est */}
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 font-sans">Op #</label>
+                                    <div className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-3 text-xs font-bold text-gray-600 font-sans">
+                                        {order.opNumber}
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 font-sans">Batch Qty</label>
+                                    <div className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-3 text-xs font-bold text-gray-600 font-sans">
+                                        {order.batch}
+                                    </div>
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-400 uppercase ml-1 font-sans">Est/Part</label>
+                                    <div className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-3 text-xs font-bold text-gray-600 font-sans">
+                                        {order.estPart}
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    )}
                 </section>
             </main>
         </div>
