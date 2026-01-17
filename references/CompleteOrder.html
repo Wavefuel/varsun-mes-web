@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" name="viewport" />
+    <title>Daily WIP Logging Screen</title>
+    <link href="https://fonts.googleapis.com" rel="preconnect" />
+    <link crossorigin="" href="https://fonts.gstatic.com" rel="preconnect" />
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <script id="tailwind-config">
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2D5A75",
+                        "primary-hover": "#23465b",
+                        "background-light": "#F8FAFC",
+                        "surface-white": "#FFFFFF",
+                        "text-slate": "#334155",
+                        "text-slate-light": "#64748B",
+                        "text-slate-dark": "#1E293B",
+                        "border-gray": "#E2E8F0",
+                    },
+                    fontFamily: {
+                        "sans": ["Inter", "sans-serif"]
+                    },
+                    boxShadow: {
+                        'soft': '0 2px 8px rgba(0, 0, 0, 0.04)',
+                        'input': '0 1px 2px 0 rgba(0, 0, 0, 0.05)',
+                    }
+                },
+            },
+        }
+    </script>
+    <style type="text/tailwindcss">
+        @layer utilities {
+            .no-scrollbar::-webkit-scrollbar {
+                display: none;
+            }
+            .no-scrollbar {
+                -ms-overflow-style: none;
+                scrollbar-width: none;
+            }
+        }
+        .radial-progress {
+            background: radial-gradient(closest-side, #FFFFFF 82%, transparent 83% 100%),
+                        conic-gradient(var(--tw-gradient-from) calc(var(--value) * 1%), #E2E8F0 0);
+        }.pb-safe {
+            padding-bottom: env(safe-area-inset-bottom);
+        }
+    </style>
+    <style>
+        body {
+            min-height: 100vh;
+            min-height: -webkit-fill-available;
+        }
+
+        html {
+            height: -webkit-fill-available;
+        }
+    </style>
+    <style>
+        body {
+            min-height: max(884px, 100dvh);
+        }
+    </style>
+</head>
+
+<body class="bg-background-light flex flex-col font-sans text-text-slate overflow-hidden h-screen">
+    <header class="flex-none bg-white border-b border-border-gray shadow-sm z-30">
+        <div class="px-4 py-3 flex items-center justify-between gap-3">
+            <button
+                class="size-10 flex items-center justify-center rounded-lg hover:bg-gray-50 text-text-slate border border-border-gray/60 transition-colors active:bg-gray-100">
+                <span class="material-symbols-outlined text-[22px]">arrow_back</span>
+            </button>
+            <div class="flex-1 flex flex-col items-center justify-center">
+                <h1 class="text-xs font-semibold text-text-slate-light uppercase tracking-wider mb-0.5">Work Order</h1>
+                <div class="text-text-slate-dark font-bold text-base leading-tight flex items-center gap-2">
+                    WO-98765
+                    <span class="text-gray-300 font-light">|</span>
+                    CNC-01
+                </div>
+            </div>
+            <div class="flex flex-col items-end justify-center min-w-[40px]">
+                <div
+                    class="flex items-center gap-1.5 bg-blue-50/80 px-2 py-1 rounded-md border border-blue-100 shadow-sm">
+                    <span class="relative flex h-2 w-2">
+                        <span
+                            class="animate-ping absolute inline-flex h-full w-full rounded-full bg-primary opacity-75"></span>
+                        <span class="relative inline-flex rounded-full h-2 w-2 bg-primary"></span>
+                    </span>
+                    <span class="text-[10px] font-bold text-primary uppercase tracking-wide leading-none">Active</span>
+                </div>
+            </div>
+        </div>
+    </header>
+    <main class="flex-1 overflow-y-auto no-scrollbar w-full max-w-md mx-auto relative">
+        <div class="pb-6">
+            <section class="px-4 pt-5">
+                <div class="grid grid-cols-3 gap-3">
+                    <div
+                        class="bg-white border border-border-gray rounded-lg p-3 shadow-soft flex flex-col justify-center items-center text-center h-20">
+                        <p class="text-[11px] text-text-slate-light font-medium mb-1">Part Number</p>
+                        <p class="text-text-slate-dark font-bold text-sm leading-tight truncate w-full px-1">XJ-900-V2
+                        </p>
+                    </div>
+                    <div
+                        class="bg-white border border-border-gray rounded-lg p-3 shadow-soft flex flex-col justify-center items-center text-center h-20">
+                        <p class="text-[11px] text-text-slate-light font-medium mb-1">Target Output</p>
+                        <p class="text-text-slate-dark font-bold text-sm leading-tight">500 <span
+                                class="text-[10px] font-normal text-text-slate-light">pcs</span></p>
+                    </div>
+                    <div
+                        class="bg-white border border-border-gray rounded-lg p-3 shadow-soft flex flex-col justify-center items-center text-center h-20">
+                        <p class="text-[11px] text-text-slate-light font-medium mb-1">Shift Date</p>
+                        <p class="text-text-slate-dark font-bold text-sm leading-tight">Oct 24</p>
+                    </div>
+                </div>
+            </section>
+            <div class="px-4 space-y-5 mt-5">
+                <div class="bg-white rounded-xl p-5 border border-border-gray shadow-soft relative overflow-hidden">
+                    <div class="flex items-center justify-between mb-5">
+                        <div>
+                            <h3 class="text-text-slate-light text-xs font-semibold uppercase tracking-wide mb-1">
+                                Efficiency</h3>
+                            <div class="flex items-baseline gap-2">
+                                <span class="text-4xl font-bold text-text-slate-dark tracking-tight">78%</span>
+                                <div
+                                    class="flex items-center gap-0.5 text-xs font-medium text-red-600 bg-red-50 px-1.5 py-0.5 rounded border border-red-100">
+                                    <span class="material-symbols-outlined text-[14px]">trending_down</span>
+                                    20u
+                                </div>
+                            </div>
+                            <p class="text-[11px] text-text-slate-light mt-1">Based on EST 4.5m / part</p>
+                        </div>
+                        <div class="relative size-16 flex-shrink-0 mr-1">
+                            <div class="radial-progress absolute inset-0 rounded-full from-primary to-gray-100"
+                                style="--value:78;"></div>
+                            <div class="absolute inset-0 flex items-center justify-center">
+                                <span class="material-symbols-outlined text-primary text-[24px]">factory</span>
+                            </div>
+                        </div>
+                    </div>
+                    <div>
+                        <div class="flex justify-between text-xs font-medium mb-2">
+                            <span class="text-text-slate-light">Progress</span>
+                            <span class="text-text-slate-dark">390 / 500</span>
+                        </div>
+                        <div class="h-2 w-full bg-gray-100 rounded-full overflow-hidden border border-gray-100">
+                            <div class="h-full bg-primary w-[78%] rounded-full"></div>
+                        </div>
+                    </div>
+                </div>
+                <div class="space-y-5">
+                    <div class="space-y-2">
+                        <label
+                            class="block text-xs font-semibold text-text-slate-dark uppercase tracking-wide ml-0.5">Actual
+                            Output (Good)</label>
+                        <div
+                            class="flex items-stretch h-12 bg-white rounded-lg border border-border-gray shadow-input overflow-hidden focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all group">
+                            <button
+                                class="w-14 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 border-r border-border-gray text-text-slate-light hover:text-primary transition-colors flex items-center justify-center">
+                                <span class="material-symbols-outlined text-[22px]">remove</span>
+                            </button>
+                            <input
+                                class="flex-1 bg-transparent text-center text-xl font-bold text-text-slate-dark border-none focus:ring-0 placeholder-gray-300 font-sans"
+                                placeholder="0" type="number" value="390" />
+                            <button
+                                class="w-14 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 border-l border-border-gray text-text-slate-light hover:text-primary transition-colors flex items-center justify-center">
+                                <span class="material-symbols-outlined text-[22px]">add</span>
+                            </button>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-2 gap-4">
+                        <div class="space-y-2">
+                            <label
+                                class="block text-xs font-semibold text-text-slate-dark uppercase tracking-wide ml-0.5">Tool
+                                Changes</label>
+                            <div
+                                class="flex items-stretch h-12 bg-white rounded-lg border border-border-gray shadow-input overflow-hidden focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all">
+                                <button
+                                    class="w-12 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 border-r border-border-gray text-text-slate-light hover:text-primary transition-colors flex items-center justify-center">
+                                    <span class="material-symbols-outlined text-[20px]">remove</span>
+                                </button>
+                                <input
+                                    class="flex-1 min-w-0 bg-transparent text-center text-lg font-bold text-text-slate-dark border-none focus:ring-0 p-0"
+                                    type="number" value="2" />
+                                <button
+                                    class="w-12 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 border-l border-border-gray text-text-slate-light hover:text-primary transition-colors flex items-center justify-center">
+                                    <span class="material-symbols-outlined text-[20px]">add</span>
+                                </button>
+                            </div>
+                        </div>
+                        <div class="space-y-2">
+                            <label
+                                class="block text-xs font-semibold text-text-slate-dark uppercase tracking-wide ml-0.5">Rejects</label>
+                            <div
+                                class="flex items-stretch h-12 bg-white rounded-lg border border-border-gray shadow-input overflow-hidden focus-within:ring-1 focus-within:ring-primary focus-within:border-primary transition-all">
+                                <button
+                                    class="w-12 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 border-r border-border-gray text-text-slate-light hover:text-primary transition-colors flex items-center justify-center">
+                                    <span class="material-symbols-outlined text-[20px]">remove</span>
+                                </button>
+                                <input
+                                    class="flex-1 min-w-0 bg-transparent text-center text-lg font-bold text-red-600 border-none focus:ring-0 p-0"
+                                    type="number" value="0" />
+                                <button
+                                    class="w-12 bg-gray-50 hover:bg-gray-100 active:bg-gray-200 border-l border-border-gray text-text-slate-light hover:text-primary transition-colors flex items-center justify-center">
+                                    <span class="material-symbols-outlined text-[20px]">add</span>
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                    <div class="space-y-2">
+                        <label
+                            class="block text-xs font-semibold text-text-slate-dark uppercase tracking-wide ml-0.5">Remarks
+                            <span
+                                class="text-[10px] font-normal text-text-slate-light normal-case">(optional)</span></label>
+                        <textarea
+                            class="w-full bg-white rounded-lg border border-border-gray focus:border-primary focus:ring-1 focus:ring-primary text-text-slate-dark p-3 text-sm min-h-[80px] resize-none placeholder-gray-400 shadow-input"
+                            placeholder="Enter notes..."></textarea>
+                    </div>
+                    <div class="pt-4 pb-2">
+                        <button
+                            class="w-full bg-primary hover:bg-primary-hover text-white font-medium text-base h-12 rounded-lg flex items-center justify-center gap-2 shadow-soft transition-all active:scale-[0.98]">
+                            <span class="material-symbols-outlined text-[20px]">save</span>
+                            Save &amp; Submit Entry
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </main>
+    <footer class="flex-none bg-white border-t border-border-gray z-50 pb-safe">
+        <nav class="flex justify-around items-center px-4 py-2 max-w-md mx-auto">
+            <a class="flex flex-col items-center gap-1 p-2 rounded-lg group hover:bg-gray-50 w-full transition-colors"
+                href="#">
+                <span class="material-symbols-outlined text-primary text-[24px]">home</span>
+                <span class="text-[10px] font-medium text-primary">Home</span>
+            </a>
+            <a class="flex flex-col items-center gap-1 p-2 rounded-lg group hover:bg-gray-50 w-full transition-colors"
+                href="#">
+                <span
+                    class="material-symbols-outlined text-text-slate-light group-hover:text-primary transition-colors text-[24px]">calendar_month</span>
+                <span
+                    class="text-[10px] font-medium text-text-slate-light group-hover:text-primary transition-colors">Planning</span>
+            </a>
+            <a class="flex flex-col items-center gap-1 p-2 rounded-lg group hover:bg-gray-50 w-full transition-colors"
+                href="#">
+                <span
+                    class="material-symbols-outlined text-text-slate-light group-hover:text-primary transition-colors text-[24px]">inventory_2</span>
+                <span
+                    class="text-[10px] font-medium text-text-slate-light group-hover:text-primary transition-colors">Stock</span>
+            </a>
+            <a class="flex flex-col items-center gap-1 p-2 rounded-lg group hover:bg-gray-50 w-full transition-colors"
+                href="#">
+                <span
+                    class="material-symbols-outlined text-text-slate-light group-hover:text-primary transition-colors text-[24px]">bar_chart</span>
+                <span
+                    class="text-[10px] font-medium text-text-slate-light group-hover:text-primary transition-colors">Data</span>
+            </a>
+        </nav>
+    </footer>
+
+</body>
+
+</html>

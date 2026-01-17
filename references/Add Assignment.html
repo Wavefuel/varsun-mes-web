@@ -1,0 +1,299 @@
+<!DOCTYPE html>
+
+<html class="light" lang="en">
+
+<head>
+    <meta charset="utf-8" />
+    <meta content="width=device-width, initial-scale=1.0" name="viewport" />
+    <title>Production Assignment &amp; Planning Dashboard</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link
+        href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300;400;500;600;700&amp;family=Noto+Sans:wght@400;700&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <link
+        href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&amp;display=swap"
+        rel="stylesheet" />
+    <script id="tailwind-config">
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#2a5e6f",
+                        "accent": "#BFE00D",
+                        "industrial-slate": "#4a5568",
+                        "background-light": "#f7f7f8",
+                        "background-dark": "#21242c",
+                    },
+                    fontFamily: {
+                        "display": ["Space Grotesk", "sans-serif"],
+                        "sans": ["Noto Sans", "sans-serif"]
+                    },
+                    borderRadius: {
+                        "DEFAULT": "0.25rem",
+                        "lg": "0.5rem",
+                        "xl": "0.75rem",
+                        "full": "9999px"
+                    },
+                },
+            },
+        }
+    </script>
+    <style>
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
+        }
+
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
+        }
+
+        .form-input-focus:focus {
+            border-color: #2a5e6f !important;
+            ring-color: #2a5e6f !important;
+        }
+    </style>
+    <style>
+        body {
+            min-height: max(884px, 100dvh);
+        }
+    </style>
+</head>
+
+<body class="bg-background-light dark:bg-background-dark font-display text-[#131516] dark:text-gray-100 min-h-screen">
+    <!-- Top Navigation Bar -->
+    <header class="sticky top-0 z-50 bg-white dark:bg-background-dark border-b border-gray-200 dark:border-gray-800">
+        <div class="flex items-center p-4 justify-between">
+            <div class="flex items-center gap-2">
+                <span class="material-symbols-outlined text-primary text-2xl">arrow_back</span>
+                <div>
+                    <p class="text-[10px] uppercase tracking-widest text-gray-500 font-bold leading-none">Planning</p>
+                    <h2 class="text-lg font-bold leading-tight tracking-tight">Shift Assignment</h2>
+                </div>
+            </div>
+            <button
+                class="bg-primary text-white px-5 py-2 rounded-lg font-bold text-sm shadow-sm active:scale-95 transition-transform">
+                SAVE
+            </button>
+        </div>
+    </header>
+    <main class="p-4 space-y-6 pb-24">
+        <!-- Capacity Warning Banner (Dynamic Logic Simulation) -->
+        <div class="bg-accent/10 border-l-4 border-accent p-4 rounded-r-lg flex items-start gap-3">
+            <span class="material-symbols-outlined text-primary font-bold">warning</span>
+            <div>
+                <p class="text-sm font-bold text-primary">Capacity Warning</p>
+                <p class="text-xs text-primary/80">Planned output exceeds shift duration by <span
+                        class="font-bold underline">1.2 hours</span>. Consider reallocating batch quantity.</p>
+            </div>
+        </div>
+        <!-- Section: New Assignment Form -->
+        <section
+            class="bg-white dark:bg-gray-900 rounded-xl border border-gray-100 dark:border-gray-800 shadow-sm overflow-hidden">
+            <div
+                class="bg-gray-50 dark:bg-gray-800/50 px-4 py-3 border-b border-gray-100 dark:border-gray-800 flex justify-between items-center">
+                <h3 class="font-bold text-sm uppercase tracking-wider text-primary">New Assignment</h3>
+                <span class="material-symbols-outlined text-gray-400">precision_manufacturing</span>
+            </div>
+            <div class="p-4 space-y-4">
+                <!-- Dropdowns Pair -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] font-bold text-gray-500 uppercase ml-1">Machine</label>
+                        <div class="relative">
+                            <select
+                                class="w-full bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-lg py-3 px-3 text-sm appearance-none focus:ring-primary focus:border-primary">
+                                <option>CNC-042 (Alpha)</option>
+                                <option>LATH-09 (Beta)</option>
+                                <option>MILL-12 (Gamma)</option>
+                            </select>
+                            <span
+                                class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xl">expand_more</span>
+                        </div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] font-bold text-gray-500 uppercase ml-1">Operator</label>
+                        <div class="relative">
+                            <select
+                                class="w-full bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-lg py-3 px-3 text-sm appearance-none focus:ring-primary focus:border-primary">
+                                <option>Marcus Jensen</option>
+                                <option>Sarah Chen</option>
+                                <option>David Miller</option>
+                            </select>
+                            <span
+                                class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xl">expand_more</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Date and Shift Selection -->
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] font-bold text-gray-500 uppercase ml-1">Shift Date</label>
+                        <div
+                            class="flex items-center bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-lg p-3">
+                            <span class="text-sm font-medium">Oct 24, 2023</span>
+                            <span class="material-symbols-outlined ml-auto text-gray-400 text-lg">calendar_today</span>
+                        </div>
+                    </div>
+                    <div class="space-y-1.5">
+                        <label class="text-[11px] font-bold text-gray-500 uppercase ml-1">Shift Work</label>
+                        <div class="relative">
+                            <select
+                                class="w-full bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-lg py-3 px-3 text-sm appearance-none focus:ring-primary focus:border-primary">
+                                <option>Day Shift (S1)</option>
+                                <option>Night Shift (S2)</option>
+                                <option>Custom</option>
+                            </select>
+                            <span
+                                class="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-xl">expand_more</span>
+                        </div>
+                    </div>
+                </div>
+                <!-- Visual Logic Badges -->
+                <div class="flex gap-2 bg-primary/5 dark:bg-primary/20 p-3 rounded-lg border border-primary/10">
+                    <div class="flex-1">
+                        <p class="text-[9px] font-bold text-primary/60 uppercase">Code</p>
+                        <p class="text-xs font-bold text-primary">SH-D24</p>
+                    </div>
+                    <div class="w-px bg-primary/20"></div>
+                    <div class="flex-1">
+                        <p class="text-[9px] font-bold text-primary/60 uppercase">Start</p>
+                        <p class="text-xs font-bold text-primary">06:00 AM</p>
+                    </div>
+                    <div class="w-px bg-primary/20"></div>
+                    <div class="flex-1">
+                        <p class="text-[9px] font-bold text-primary/60 uppercase">End</p>
+                        <p class="text-xs font-bold text-primary">02:00 PM</p>
+                    </div>
+                </div>
+                <!-- Production Details -->
+                <div class="space-y-3 pt-2">
+                    <div class="grid grid-cols-2 gap-3">
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-bold text-gray-500 uppercase ml-1">Part Number</label>
+                            <input
+                                class="w-full bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-lg py-3 px-3 text-sm font-mono focus:ring-primary focus:border-primary"
+                                type="text" value="P-90882-X" />
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-bold text-gray-500 uppercase ml-1">Work Order</label>
+                            <input
+                                class="w-full bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-lg py-3 px-3 text-sm font-mono focus:ring-primary focus:border-primary"
+                                type="text" value="WO-55612" />
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-3 gap-2">
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-bold text-gray-500 uppercase ml-1">Op #</label>
+                            <input
+                                class="w-full bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-lg py-3 px-3 text-sm focus:ring-primary focus:border-primary"
+                                type="number" value="20" />
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-bold text-gray-500 uppercase ml-1">Batch Qty</label>
+                            <input
+                                class="w-full bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-lg py-3 px-3 text-sm focus:ring-primary focus:border-primary"
+                                type="number" value="450" />
+                        </div>
+                        <div class="space-y-1.5">
+                            <label class="text-[11px] font-bold text-gray-500 uppercase ml-1">Est/Part</label>
+                            <div class="relative">
+                                <input
+                                    class="w-full bg-gray-50 dark:bg-gray-800 border-gray-200 dark:border-gray-700 rounded-lg py-3 px-3 text-sm focus:ring-primary focus:border-primary"
+                                    type="text" value="1.5m" />
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+        <!-- Section: Queue / Planned Assignments -->
+        <section class="space-y-3">
+            <div class="flex items-center justify-between px-1">
+                <h3 class="font-bold text-sm uppercase tracking-wider text-gray-600 dark:text-gray-400">Planned Queue
+                    (CNC-042)</h3>
+                <span class="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded">3 Tasks</span>
+            </div>
+            <!-- Scrollable Table Alternative for Mobile -->
+            <div class="space-y-2">
+                <!-- Row 1 -->
+                <div
+                    class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-3 rounded-lg flex items-center gap-3">
+                    <div class="size-10 bg-gray-100 dark:bg-gray-800 rounded flex items-center justify-center shrink-0">
+                        <span class="material-symbols-outlined text-primary text-xl">play_circle</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-start">
+                            <p class="font-bold text-sm truncate">WO-55400 • P-1022</p>
+                            <span
+                                class="text-[9px] font-bold text-green-600 bg-green-50 px-1.5 py-0.5 rounded">RUNNING</span>
+                        </div>
+                        <p class="text-[11px] text-gray-500 font-medium">Op 10 • Marcus J. • Shift S1</p>
+                    </div>
+                </div>
+                <!-- Row 2 -->
+                <div
+                    class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-3 rounded-lg flex items-center gap-3 opacity-90">
+                    <div
+                        class="size-10 bg-gray-100 dark:bg-gray-800 rounded flex items-center justify-center shrink-0 text-gray-400">
+                        <span class="material-symbols-outlined text-xl">pending</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-start">
+                            <p class="font-bold text-sm truncate">WO-55401 • P-3341</p>
+                            <span
+                                class="text-[9px] font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">QUEUED</span>
+                        </div>
+                        <p class="text-[11px] text-gray-500 font-medium">Op 20 • Sarah C. • Shift S1</p>
+                    </div>
+                </div>
+                <!-- Row 3 -->
+                <div
+                    class="bg-white dark:bg-gray-900 border border-gray-100 dark:border-gray-800 p-3 rounded-lg flex items-center gap-3 opacity-70">
+                    <div
+                        class="size-10 bg-gray-100 dark:bg-gray-800 rounded flex items-center justify-center shrink-0 text-gray-400">
+                        <span class="material-symbols-outlined text-xl">schedule</span>
+                    </div>
+                    <div class="flex-1 min-w-0">
+                        <div class="flex justify-between items-start">
+                            <p class="font-bold text-sm truncate">WO-55410 • P-9001</p>
+                            <span class="text-[9px] font-bold text-gray-400 bg-gray-50 px-1.5 py-0.5 rounded">NEXT
+                                SHIFT</span>
+                        </div>
+                        <p class="text-[11px] text-gray-500 font-medium">Op 10 • David M. • Shift S2</p>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+    <!-- Bottom Navigation Bar -->
+    <nav
+        class="fixed bottom-0 w-full bg-white dark:bg-background-dark border-t border-gray-200 dark:border-gray-800 flex justify-around items-center py-2 px-6 z-50">
+        <button class="flex flex-col items-center gap-1 text-gray-400">
+            <span class="material-symbols-outlined">dashboard</span>
+            <span class="text-[10px] font-bold uppercase tracking-tighter">Home</span>
+        </button>
+        <button class="flex flex-col items-center gap-1 text-primary">
+            <span class="material-symbols-outlined">calendar_month</span>
+            <span class="text-[10px] font-bold uppercase tracking-tighter">Planning</span>
+        </button>
+        <button
+            class="relative -top-6 flex flex-col items-center justify-center size-14 bg-primary rounded-full shadow-lg border-4 border-background-light dark:border-background-dark text-white">
+            <span class="material-symbols-outlined">add</span>
+        </button>
+        <button class="flex flex-col items-center gap-1 text-gray-400">
+            <span class="material-symbols-outlined">inventory_2</span>
+            <span class="text-[10px] font-bold uppercase tracking-tighter">Stock</span>
+        </button>
+        <button class="flex flex-col items-center gap-1 text-gray-400">
+            <span class="material-symbols-outlined">analytics</span>
+            <span class="text-[10px] font-bold uppercase tracking-tighter">Data</span>
+        </button>
+    </nav>
+</body>
+
+</html>
