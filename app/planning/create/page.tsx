@@ -360,12 +360,12 @@ export default function CreateAssignmentPage() {
                     <div className="flex items-center justify-between px-1">
                         <h3 className="font-bold text-sm uppercase tracking-wider text-gray-600">Planned Queue <span className="text-gray-400 normal-case tracking-normal">({machine.split(' ')[0]})</span></h3>
                         <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded">
-                            {orders.filter(o => o.machine === machine && o.date === date).length} Tasks
+                            {orders.filter(o => o.machine === machine && o.date === date && o.status !== 'COMPLETED').length} Tasks
                         </span>
                     </div>
                     {/* Filtered Queue List */}
                     <div className="space-y-2">
-                        {orders.filter(o => o.machine === machine && o.date === date)
+                        {orders.filter(o => o.machine === machine && o.date === date && o.status !== 'COMPLETED')
                             .sort((a, b) => a.startTime.localeCompare(b.startTime))
                             .map((order) => (
                                 <div key={order.id} className="bg-white border border-gray-100 p-3 rounded-lg flex items-center gap-3">
@@ -392,7 +392,7 @@ export default function CreateAssignmentPage() {
                                 </div>
                             ))}
 
-                        {orders.filter(o => o.machine === machine && o.date === date).length === 0 && (
+                        {orders.filter(o => o.machine === machine && o.date === date && o.status !== 'COMPLETED').length === 0 && (
                             <div className="text-center py-6 text-gray-400 text-xs italic bg-gray-50/50 rounded-lg border border-dashed border-gray-200">
                                 No planned tasks for {machine.split(' ')[0]} on this date.
                             </div>

@@ -19,9 +19,7 @@ export default function AppHeader({ title, subtitle }: AppHeaderProps) {
                     )}
                 </div>
                 <div className="flex items-center gap-3">
-                    <button className="size-8 rounded-full bg-gray-100 flex items-center justify-center text-primary active:scale-95 transition-transform">
-                        <span className="material-symbols-outlined text-xl">notifications</span>
-                    </button>
+
                     <Link href="/login" className="size-9 rounded-full bg-primary/10 border-2 border-white overflow-hidden shadow-sm active:scale-95 transition-transform block">
                         <img
                             src="https://api.dicebear.com/7.x/avataaars/svg?seed=Marcus"

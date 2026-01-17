@@ -77,7 +77,6 @@ export default function EditAssignmentPage() {
             batch: batch,
             estPart: estPart,
             target: batch,
-            // We don't change status here usually unless we explicitly add a dropdown for it
         });
 
         toast.success("Assignment updated");
@@ -87,217 +86,201 @@ export default function EditAssignmentPage() {
     return (
         <div className="flex flex-col min-h-screen bg-background-dashboard">
 
-            {/* Header - Styled to match AppHeader */}
-            <header className="sticky top-0 z-30 bg-white border-b border-gray-200 px-4 py-3 flex items-center justify-between shadow-sm">
-                <div className="flex items-center gap-3">
-                    <button
-                        onClick={() => router.back()}
-                        className="size-8 flex items-center justify-center rounded-full hover:bg-gray-100 text-gray-500 active:scale-95 transition-transform -ml-2"
-                    >
-                        <span className="material-symbols-outlined text-[24px]">arrow_back</span>
-                    </button>
-                    <div>
-                        <span className="text-[10px] font-bold text-gray-400 uppercase tracking-widest block leading-none mb-0.5">Planning</span>
-                        <h1 className="text-lg font-bold font-display text-primary leading-none">Edit Assignment</h1>
+            {/* Top Navigation Bar - Matching create page header exactly */}
+            <header className="sticky top-0 z-50 bg-white border-b border-gray-200">
+                <div className="flex items-center p-4 justify-between">
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => router.back()} className="flex items-center justify-center">
+                            <span className="material-symbols-outlined text-primary text-2xl">arrow_back</span>
+                        </button>
+                        <div>
+                            <p className="text-[10px] uppercase tracking-widest text-gray-500 font-bold leading-none mb-0.5">Planning</p>
+                            <h2 className="text-lg font-bold leading-tight tracking-tight text-[#131516]">Edit Assignment</h2>
+                        </div>
                     </div>
+                    <button
+                        onClick={handleSave}
+                        className="bg-primary text-white px-5 py-2 rounded-lg font-bold text-sm shadow-sm active:scale-95 transition-transform"
+                    >
+                        SAVE
+                    </button>
                 </div>
-                <button
-                    onClick={handleSave}
-                    className="bg-primary hover:bg-[#23485d] text-white text-[12px] font-bold px-4 py-2 rounded-lg shadow-sm active:scale-[0.98] transition-all"
-                >
-                    SAVE
-                </button>
             </header>
 
-            <main className="p-5 pb-32 space-y-6 max-w-[480px] mx-auto">
+            <main className="p-4 space-y-6 pb-24">
 
-                {/* Section: Resources */}
-                <section className="space-y-3">
-                    <h2 className="text-xs font-bold text-primary uppercase tracking-widest ml-1">Resources</h2>
-                    <div className="space-y-4">
-                        {/* Machine */}
-                        <div>
-                            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1 mb-1.5">Machine</label>
-                            <div className="relative">
-                                <select
-                                    value={machine}
-                                    onChange={(e) => setMachine(e.target.value)}
-                                    className="w-full appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3.5 text-sm font-bold text-gray-800 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all shadow-sm"
-                                >
-                                    <option>CNC-042 (Alpha)</option>
-                                    <option>CNC-01</option>
-                                    <option>CNC-03 (Beta)</option>
-                                </select>
-                                <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[22px]">expand_more</span>
-                            </div>
-                        </div>
-
-                        {/* Operator */}
-                        <div>
-                            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1 mb-1.5">Operator</label>
-                            <div className="relative">
-                                <select
-                                    value={operator}
-                                    onChange={(e) => setOperator(e.target.value)}
-                                    className="w-full appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3.5 text-sm font-bold text-gray-800 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all shadow-sm"
-                                >
-                                    <option>Marcus Jensen</option>
-                                    <option>Sarah Chen</option>
-                                    <option>Alex R.</option>
-                                </select>
-                                <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[22px]">expand_more</span>
-                            </div>
-                        </div>
-                    </div>
-                </section>
-
-                {/* Section: Schedule */}
-                <section className="space-y-3">
-                    <h2 className="text-xs font-bold text-primary uppercase tracking-widest ml-1">Schedule</h2>
-
-                    {/* Date & Shift Row */}
-                    <div className="grid grid-cols-2 gap-3">
-                        <div>
-                            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1 mb-1.5">Date</label>
-                            <div className="relative">
-                                <CustomDatePicker
-                                    value={date}
-                                    onChange={setDate}
-                                    customInput={
-                                        <button className="w-full flex items-center justify-between bg-white border border-gray-300 rounded-xl px-4 py-3.5 text-sm font-bold text-gray-800 transition-all shadow-sm uppercase text-left hover:border-primary/50 focus:border-primary">
-                                            <span>{date ? new Date(date).toLocaleDateString('en-CA') : 'Select Date'}</span>
-                                            <span className="material-symbols-outlined text-gray-400 text-[20px]">calendar_today</span>
-                                        </button>
-                                    }
-                                />
-                            </div>
-                        </div>
-
-                        <div>
-                            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1 mb-1.5">Shift</label>
-                            <div className="relative">
-                                <select
-                                    value={shift}
-                                    onChange={(e) => setShift(e.target.value)}
-                                    className="w-full appearance-none bg-white border border-gray-300 rounded-xl px-4 py-3.5 text-sm font-bold text-gray-800 focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary/20 transition-all shadow-sm"
-                                >
-                                    <option>Day (S1)</option>
-                                    <option>Night (S2)</option>
-                                </select>
-                                <span className="material-symbols-outlined absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[22px]">expand_more</span>
-                            </div>
-                        </div>
+                {/* Section: Edit Assignment Form */}
+                <section className="bg-white rounded-xl border border-gray-100 shadow-sm overflow-hidden">
+                    <div className="bg-gray-50 px-4 py-3 border-b border-gray-100 flex justify-between items-center">
+                        <h3 className="font-bold text-sm uppercase tracking-wider text-primary">Assignment Details</h3>
+                        <span className="material-symbols-outlined text-gray-400">edit_note</span>
                     </div>
 
-                    {/* Times Grid */}
-                    <div className="grid grid-cols-3 gap-3">
-                        <div>
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1 mb-1.5">Start</label>
-                            <input
-                                type="time"
-                                value={startTime}
-                                onChange={(e) => setStartTime(e.target.value)}
-                                className="w-full bg-white border border-gray-300 rounded-xl px-2 py-3 text-sm font-bold text-gray-800 text-center focus:outline-none focus:border-primary shadow-sm"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1 mb-1.5">End</label>
-                            <input
-                                type="time"
-                                value={endTime}
-                                onChange={(e) => setEndTime(e.target.value)}
-                                className="w-full bg-white border border-gray-300 rounded-xl px-2 py-3 text-sm font-bold text-gray-800 text-center focus:outline-none focus:border-primary shadow-sm"
-                            />
-                        </div>
-                        <div>
-                            <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1 mb-1.5">Code</label>
-                            <input
-                                type="text"
-                                value={code}
-                                onChange={(e) => setCode(e.target.value)}
-                                className="w-full bg-white border border-gray-300 rounded-xl px-2 py-3 text-sm font-bold text-gray-800 text-center focus:outline-none focus:border-primary shadow-sm"
-                            />
-                        </div>
-                    </div>
-                </section>
-
-                {/* Section: Production */}
-                <section className="space-y-3">
-                    <h2 className="text-xs font-bold text-primary uppercase tracking-widest ml-1">Production</h2>
-                    <div className="space-y-4">
-
-                        <div>
-                            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1 mb-1.5">Part Number</label>
-                            <input
-                                type="text"
-                                value={partNumber}
-                                onChange={(e) => {
-                                    setPartNumber(e.target.value);
-                                    if (errors.partNumber) setErrors(prev => ({ ...prev, partNumber: false }));
-                                }}
-                                className={`w-full bg-white border rounded-xl px-4 py-3.5 text-base font-bold text-gray-800 focus:outline-none focus:ring-1 transition-all shadow-sm ${errors.partNumber
-                                    ? 'border-red-500 focus:border-red-500 focus:ring-red-500/20'
-                                    : 'border-gray-300 focus:border-primary focus:ring-primary/20'
-                                    }`}
-                                placeholder="Enter Part #"
-                            />
-                        </div>
-
-                        <div>
-                            <label className="block text-[11px] font-bold text-gray-400 uppercase tracking-wider ml-1 mb-1.5">Work Order</label>
-                            <input
-                                type="text"
-                                value={workOrderId}
-                                disabled // Work Order ID shouldn't be changeable usually as it's the key
-                                className="w-full bg-gray-50 border border-gray-200 rounded-xl px-4 py-3.5 text-base font-bold text-gray-500 focus:outline-none"
-                            />
-                        </div>
-
-                        {/* Quantitative Data */}
-                        <div className="grid grid-cols-3 gap-3">
-                            <div>
-                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1 mb-1.5">Op #</label>
-                                <input
-                                    type="number"
-                                    value={opNumber}
-                                    onChange={(e) => setOpNumber(Number(e.target.value))}
-                                    className="w-full bg-white border border-gray-300 rounded-xl px-2 py-3 text-sm font-bold text-gray-800 text-center focus:outline-none focus:border-primary shadow-sm"
-                                />
+                    <div className="p-4 space-y-4">
+                        {/* Dropdowns Pair (Machine & Operator) */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase ml-1 font-sans">Machine</label>
+                                <div className="relative">
+                                    <select
+                                        value={machine}
+                                        onChange={(e) => setMachine(e.target.value)}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-3 text-xs text-gray-800 appearance-none focus:ring-primary focus:border-primary font-sans"
+                                    >
+                                        <option>CNC-042 (Alpha)</option>
+                                        <option>LATH-09 (Beta)</option>
+                                        <option>MILL-12 (Gamma)</option>
+                                    </select>
+                                    <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[18px]">expand_more</span>
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1 mb-1.5">Batch</label>
-                                <input
-                                    type="number"
-                                    value={batch}
-                                    onChange={(e) => setBatch(Number(e.target.value))}
-                                    className="w-full bg-white border border-gray-300 rounded-xl px-2 py-3 text-sm font-bold text-gray-800 text-center focus:outline-none focus:border-primary shadow-sm"
-                                />
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase ml-1 font-sans">Operator</label>
+                                <div className="relative">
+                                    <select
+                                        value={operator}
+                                        onChange={(e) => setOperator(e.target.value)}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-3 text-xs text-gray-800 appearance-none focus:ring-primary focus:border-primary font-sans"
+                                    >
+                                        <option>Marcus Jensen</option>
+                                        <option>Sarah Chen</option>
+                                        <option>David Miller</option>
+                                    </select>
+                                    <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[18px]">expand_more</span>
+                                </div>
                             </div>
-                            <div>
-                                <label className="block text-[10px] font-bold text-gray-400 uppercase tracking-wider ml-1 mb-1.5">Est/Part</label>
+                        </div>
+
+                        {/* Date and Shift Selection */}
+                        <div className="grid grid-cols-2 gap-3">
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase ml-1 font-sans">Shift Date</label>
+                                <div className="relative">
+                                    <CustomDatePicker
+                                        value={date}
+                                        onChange={setDate}
+                                        customInput={
+                                            <button className="w-full flex items-center bg-gray-50 border border-gray-200 rounded-lg p-2.5 text-left transition-all font-sans">
+                                                <span className="text-xs font-medium text-gray-800">{date ? new Date(date).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Select Date'}</span>
+                                                <span className="material-symbols-outlined ml-auto text-gray-400 text-[18px]">calendar_today</span>
+                                            </button>
+                                        }
+                                    />
+                                </div>
+                            </div>
+                            <div className="space-y-1.5">
+                                <label className="text-[10px] font-bold text-gray-500 uppercase ml-1 font-sans">Shift Work</label>
+                                <div className="relative">
+                                    <select
+                                        value={shift}
+                                        onChange={(e) => setShift(e.target.value)}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-3 text-xs text-gray-800 appearance-none focus:ring-primary focus:border-primary font-sans"
+                                    >
+                                        <option>Day Shift (S1)</option>
+                                        <option>Night Shift (S2)</option>
+                                        <option>Custom</option>
+                                    </select>
+                                    <span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none text-[18px]">expand_more</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        {/* Visual Logic Badges (Code/Start/End) */}
+                        <div className="flex gap-2 bg-primary/5 p-3 rounded-lg border border-primary/10 transition-colors">
+                            <div className="flex-1">
+                                <p className="text-[9px] font-bold text-primary/60 uppercase">Code</p>
                                 <input
                                     type="text"
-                                    value={estPart}
-                                    onChange={(e) => setEstPart(e.target.value)}
-                                    className="w-full bg-white border border-gray-300 rounded-xl px-2 py-3 text-sm font-bold text-gray-800 text-center focus:outline-none focus:border-primary shadow-sm"
+                                    value={code}
+                                    onChange={(e) => setCode(e.target.value)}
+                                    className="w-full bg-transparent border-none p-0 text-xs font-bold text-primary focus:ring-0 placeholder-primary/50"
                                 />
+                            </div>
+                            <div className="w-px bg-primary/20"></div>
+                            <div className="flex-1">
+                                <p className="text-[9px] font-bold text-primary/60 uppercase">Start</p>
+                                <input
+                                    type="time"
+                                    value={startTime}
+                                    onChange={(e) => setStartTime(e.target.value)}
+                                    className="w-full bg-transparent border-none p-0 text-xs font-bold text-primary focus:ring-0"
+                                />
+                            </div>
+                            <div className="w-px bg-primary/20"></div>
+                            <div className="flex-1">
+                                <p className="text-[9px] font-bold text-primary/60 uppercase">End</p>
+                                <input
+                                    type="time"
+                                    value={endTime}
+                                    onChange={(e) => setEndTime(e.target.value)}
+                                    className="w-full bg-transparent border-none p-0 text-xs font-bold text-primary focus:ring-0"
+                                />
+                            </div>
+                        </div>
+
+                        {/* Production Details */}
+                        <div className="space-y-3 pt-2">
+                            {/* Part # & WO # */}
+                            <div className="grid grid-cols-2 gap-3">
+                                <div className="space-y-1.5">
+                                    <label className="text-[11px] font-bold text-gray-500 uppercase ml-1">Part Number</label>
+                                    <input
+                                        type="text"
+                                        value={partNumber}
+                                        onChange={(e) => {
+                                            setPartNumber(e.target.value);
+                                            if (errors.partNumber) setErrors(prev => ({ ...prev, partNumber: false }));
+                                        }}
+                                        className={`w-full bg-gray-50 border rounded-lg py-3 px-3 text-sm font-mono text-gray-800 focus:ring-primary focus:border-primary ${errors.partNumber ? 'border-red-500' : 'border-gray-200'}`}
+                                        placeholder="P-90882-X"
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[11px] font-bold text-gray-500 uppercase ml-1">Work Order</label>
+                                    <input
+                                        type="text"
+                                        value={workOrderId}
+                                        disabled
+                                        className="w-full bg-gray-100 border border-gray-200 rounded-lg py-3 px-3 text-sm font-mono text-gray-500 focus:outline-none cursor-not-allowed"
+                                        placeholder="WO-55612"
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Op / Batch / Est */}
+                            <div className="grid grid-cols-3 gap-2">
+                                <div className="space-y-1.5">
+                                    <label className="text-[11px] font-bold text-gray-500 uppercase ml-1">Op #</label>
+                                    <input
+                                        type="number"
+                                        value={opNumber}
+                                        onChange={(e) => setOpNumber(Number(e.target.value))}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-lg py-3 px-3 text-sm focus:ring-primary focus:border-primary"
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase ml-1 font-sans">Batch Qty</label>
+                                    <input
+                                        type="number"
+                                        value={batch}
+                                        onChange={(e) => setBatch(Number(e.target.value))}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-3 text-xs focus:ring-primary focus:border-primary font-sans"
+                                    />
+                                </div>
+                                <div className="space-y-1.5">
+                                    <label className="text-[10px] font-bold text-gray-500 uppercase ml-1 font-sans">Est/Part</label>
+                                    <input
+                                        type="text"
+                                        value={estPart}
+                                        onChange={(e) => setEstPart(e.target.value)}
+                                        className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2.5 px-3 text-xs text-center focus:ring-primary focus:border-primary font-sans"
+                                    />
+                                </div>
                             </div>
                         </div>
                     </div>
                 </section>
 
-                <button
-                    onClick={() => {
-                        if (confirm('Are you sure you want to delete this assignment?')) {
-                            deleteOrder(orderId);
-                            toast.success('Assignment deleted');
-                            router.push('/planning');
-                        }
-                    }}
-                    className="w-full bg-red-50 text-red-600 font-bold py-4 rounded-xl hover:bg-red-100 transition-colors"
-                >
-                    Delete Assignment
-                </button>
             </main>
         </div>
     );

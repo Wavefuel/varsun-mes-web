@@ -4,6 +4,7 @@ import React from 'react';
 import Link from 'next/link';
 import AppHeader from '@/components/AppHeader';
 import CustomDatePicker from '@/components/CustomDatePicker';
+import DateNavigator from '@/components/DateNavigator';
 import { useData } from '@/context/DataContext';
 
 export default function Home() {
@@ -29,28 +30,6 @@ export default function Home() {
   // Active Machines: Unique machines in active orders
   const activeMachines = new Set(activeOrders.map(o => o.machine)).size;
 
-  // Date Navigation
-  const getDisplayDate = (dateStr: string) => {
-    const date = new Date(dateStr);
-    return date.toLocaleDateString('en-US', {
-      weekday: 'short',
-      month: 'short',
-      day: 'numeric'
-    }).toUpperCase();
-  };
-
-  const handlePrevDate = () => {
-    const date = new Date(currentDate);
-    date.setDate(date.getDate() - 1);
-    setCurrentDate(date.toISOString().split('T')[0]);
-  };
-
-  const handleNextDate = () => {
-    const date = new Date(currentDate);
-    date.setDate(date.getDate() + 1);
-    setCurrentDate(date.toISOString().split('T')[0]);
-  };
-
   return (
     <div className="flex flex-col min-h-screen bg-background-dashboard">
 
@@ -59,30 +38,14 @@ export default function Home() {
       />
 
       {/* Persistent Date Navigator for Home Page */}
-      <div className="sticky top-[68px] z-20 bg-background-dashboard px-4 pt-3 pb-1">
-        <div className="flex items-center justify-between bg-white p-1 rounded-xl border border-gray-200 shadow-sm relative">
-          <button onClick={handlePrevDate} className="size-9 flex items-center justify-center rounded-lg hover:bg-gray-50 text-gray-400 active:scale-95 transition-transform z-10">
-            <span className="material-symbols-outlined text-[20px]">chevron_left</span>
-          </button>
-
-          <CustomDatePicker
-            value={currentDate}
-            onChange={setCurrentDate}
-            customInput={
-              <button className="flex items-center gap-2 text-primary relative px-4 py-1 hover:bg-gray-50 rounded-lg transition-colors">
-                <span className="material-symbols-outlined text-[20px]">calendar_month</span>
-                <span className="text-sm font-bold font-display uppercase tracking-widest">{getDisplayDate(currentDate)}</span>
-              </button>
-            }
-          />
-
-          <button onClick={handleNextDate} className="size-9 flex items-center justify-center rounded-lg hover:bg-gray-50 text-gray-400 active:scale-95 transition-transform z-10">
-            <span className="material-symbols-outlined text-[20px]">chevron_right</span>
-          </button>
-        </div>
+      <div className="sticky top-[68px] z-20 bg-background-dashboard px-4 pb-2">
+        <DateNavigator
+          currentDate={currentDate}
+          setCurrentDate={setCurrentDate}
+        />
       </div>
 
-      <main className="p-4 space-y-6">
+      <main className="px-4 pb-4 space-y-4">
 
         {/* KPI Grid */}
         <section className="grid grid-cols-2 gap-3">
@@ -181,6 +144,6 @@ export default function Home() {
 
       </main>
 
-    </div>
+    </div >
   );
 }

@@ -12,6 +12,7 @@
 :root {
   --background: #F8FAFB;
   --foreground: #1A202C;
+  --color-primary: #2D5A75;
 }
 
 body {
@@ -34,6 +35,16 @@ body {
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
 .card-shadow { box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03); }
+
+/* Hide spin buttons for number inputs */
+.no-spin-button::-webkit-outer-spin-button,
+.no-spin-button::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+.no-spin-button {
+  -moz-appearance: textfield;
+}
 
 /* Material Symbols sizing and fill utility - FORCE SOLID */
 .material-symbols-outlined {
@@ -64,4 +75,10 @@ body {
 /* Target the list items (toasts) */
 [data-sonner-toast] {
     transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1) !important;
+}
+
+/* Custom Radial Progress for Efficiency Chart */
+.radial-progress {
+  background: radial-gradient(closest-side, #FFFFFF 82%, transparent 83% 100%),
+              conic-gradient(var(--color-primary) calc(var(--value) * 1%), #E2E8F0 0);
 }

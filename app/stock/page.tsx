@@ -4,6 +4,7 @@ import React, { useState } from 'react';
 import Link from 'next/link';
 import AppHeader from '@/components/AppHeader';
 import CustomDatePicker from '@/components/CustomDatePicker';
+import DateNavigator from '@/components/DateNavigator';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useData } from '@/context/DataContext';
@@ -14,34 +15,18 @@ function cn(...inputs: ClassValue[]) {
 }
 
 export default function StockPage() {
-    const { orders, currentDate, setCurrentDate, deleteOrder } = useData();
+    const { orders, currentDate, setCurrentDate } = useData();
     const [searchQuery, setSearchQuery] = useState('');
     const [filterStatus, setFilterStatus] = useState('All');
     const [showFilters, setShowFilters] = useState(false);
-    const [isDeleteMode, setIsDeleteMode] = useState(false);
-    const [selectedIds, setSelectedIds] = useState<string[]>([]);
-    const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-    // Date Navigation
-    const getDisplayDate = (dateStr: string) => {
+    const formatDateForDisplay = (dateStr: string) => {
         const date = new Date(dateStr);
         return date.toLocaleDateString('en-US', {
             weekday: 'short',
             month: 'short',
             day: 'numeric'
         }).toUpperCase();
-    };
-
-    const handlePrevDate = () => {
-        const date = new Date(currentDate);
-        date.setDate(date.getDate() - 1);
-        setCurrentDate(date.toISOString().split('T')[0]);
-    };
-
-    const handleNextDate = () => {
-        const date = new Date(currentDate);
-        date.setDate(date.getDate() + 1);
-        setCurrentDate(date.toISOString().split('T')[0]);
     };
 
     // Filter Logic
@@ -56,36 +41,9 @@ export default function StockPage() {
             order.id.toLowerCase().includes(searchQuery.toLowerCase());
 
         const matchesStatus = filterStatus === 'All' || order.status === filterStatus.toUpperCase();
-        const matchesDeleteMode = !isDeleteMode || order.status === 'COMPLETED';
 
-        return matchesSearch && matchesStatus && matchesDeleteMode;
+        return matchesSearch && matchesStatus;
     });
-
-    // Selection Logic
-    const toggleSelection = (id: string) => {
-        setSelectedIds(prev =>
-            prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]
-        );
-    };
-
-    const handleBatchDeleteClick = () => {
-        if (selectedIds.length === 0) return;
-        setShowDeleteConfirm(true);
-    };
-
-    const confirmDelete = () => {
-        selectedIds.forEach(id => deleteOrder(id));
-        setSelectedIds([]);
-        setIsDeleteMode(false);
-        setShowDeleteConfirm(false);
-        toast.success(`Deleted ${selectedIds.length} items`);
-    };
-
-    const toggleDeleteMode = () => {
-        const newMode = !isDeleteMode;
-        setIsDeleteMode(newMode);
-        if (!newMode) setSelectedIds([]);
-    };
 
     return (
         <div className="flex flex-col min-h-screen bg-background-dashboard pb-24">
@@ -95,33 +53,15 @@ export default function StockPage() {
             <div className="sticky top-[68px] z-20 bg-background-dashboard pb-3 px-4 shadow-[0_4px_20px_-12px_rgba(0,0,0,0.1)]">
 
                 {/* Date Navigator */}
-                {/* Date Navigator */}
-                <div className={cn("py-3 transition-opacity", isDeleteMode ? "opacity-50 pointer-events-none" : "opacity-100")}>
-                    <div className="flex items-center justify-between bg-white p-1 rounded-xl border border-gray-200 shadow-sm relative">
-                        <button onClick={handlePrevDate} disabled={isDeleteMode} className="size-9 flex items-center justify-center rounded-lg hover:bg-gray-50 text-gray-400 active:scale-95 transition-transform z-10">
-                            <span className="material-symbols-outlined text-[20px]">chevron_left</span>
-                        </button>
-
-                        <CustomDatePicker
-                            value={currentDate}
-                            onChange={setCurrentDate}
-                            disabled={isDeleteMode}
-                            customInput={
-                                <button disabled={isDeleteMode} className="flex items-center gap-2 text-primary relative px-4 py-1 hover:bg-gray-50 rounded-lg transition-colors">
-                                    <span className="material-symbols-outlined text-[20px]">calendar_month</span>
-                                    <span className="text-sm font-bold font-display uppercase tracking-widest">{getDisplayDate(currentDate)}</span>
-                                </button>
-                            }
-                        />
-
-                        <button onClick={handleNextDate} disabled={isDeleteMode} className="size-9 flex items-center justify-center rounded-lg hover:bg-gray-50 text-gray-400 active:scale-95 transition-transform z-10">
-                            <span className="material-symbols-outlined text-[20px]">chevron_right</span>
-                        </button>
-                    </div>
+                <div className="pt-1 pb-0 transition-opacity">
+                    <DateNavigator
+                        currentDate={currentDate}
+                        setCurrentDate={setCurrentDate}
+                    />
                 </div>
 
                 {/* Search & Filter Row */}
-                <div className="flex gap-2.5">
+                <div className="flex gap-2.5 mt-3">
                     <div className="flex-1 relative">
                         <span className="material-symbols-outlined absolute left-3.5 top-1/2 -translate-y-1/2 text-gray-400 text-[20px]">search</span>
                         <input
@@ -171,18 +111,8 @@ export default function StockPage() {
                     <Link
                         key={order.id}
                         // Use encodeURIComponent just in case IDs have special chars
-                        href={isDeleteMode ? '#' : `/stock/${encodeURIComponent(order.id)}`}
-                        className={cn(
-                            "block bg-white rounded-xl border p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)] transition-all relative overflow-hidden",
-                            isDeleteMode ? "cursor-default" : "active:scale-[0.99] hover:border-gray-300 border-card-border",
-                            selectedIds.includes(order.id) ? "border-red-500 bg-red-50/30" : "border-card-border"
-                        )}
-                        onClick={(e) => {
-                            if (isDeleteMode) {
-                                e.preventDefault();
-                                toggleSelection(order.id);
-                            }
-                        }}
+                        href={`/stock/${encodeURIComponent(order.id)}`}
+                        className="block bg-white rounded-xl border border-card-border p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)] transition-all relative overflow-hidden active:scale-[0.99] hover:border-gray-300"
                     >
                         <div className="flex justify-between items-start gap-4">
                             {/* Left Column */}
@@ -207,30 +137,15 @@ export default function StockPage() {
 
                             {/* Right Column */}
                             <div className="flex flex-col items-end gap-3 justify-center min-h-[48px]">
-                                {isDeleteMode ? (
-                                    <div className={cn(
-                                        "size-6 rounded-full border-[1.5px] flex items-center justify-center transition-all",
-                                        selectedIds.includes(order.id)
-                                            ? "border-red-500 bg-red-50"
-                                            : "border-gray-300 bg-white"
-                                    )}>
-                                        {selectedIds.includes(order.id) && (
-                                            <div className="size-3.5 rounded-full bg-red-500 shadow-sm animate-in zoom-in-75 duration-200" />
-                                        )}
-                                    </div>
-                                ) : (
-                                    <>
-                                        {/* Target Badge */}
-                                        <span className="text-[10px] font-bold text-gray-500 bg-gray-100/80 px-2 py-1 rounded-md tracking-tight">
-                                            Target: {order.target}
-                                        </span>
+                                {/* Target Badge */}
+                                <span className="text-[10px] font-bold text-gray-500 bg-gray-100/80 px-2 py-1 rounded-md tracking-tight">
+                                    Target: {order.target}
+                                </span>
 
-                                        {/* ID Badge */}
-                                        <span className="text-[10px] font-bold text-primary/80 bg-[#F0F4F8] px-2 py-1 rounded-md tracking-tight">
-                                            {order.id}
-                                        </span>
-                                    </>
-                                )}
+                                {/* ID Badge */}
+                                <span className="text-[10px] font-bold text-primary/80 bg-[#F0F4F8] px-2 py-1 rounded-md tracking-tight">
+                                    {order.id}
+                                </span>
                             </div>
                         </div>
                     </Link>
@@ -240,68 +155,10 @@ export default function StockPage() {
                 {filteredOrders.length === 0 && (
                     <div className="text-center py-12 flex flex-col items-center opacity-60">
                         <span className="material-symbols-outlined text-[48px] text-gray-300 mb-2">search_off</span>
-                        <p className="text-sm font-bold text-gray-400">No stock items found for {getDisplayDate(currentDate)}</p>
+                        <p className="text-sm font-bold text-gray-400">No stock items found for {formatDateForDisplay(currentDate)}</p>
                     </div>
                 )}
             </main>
-
-            {/* Floating Action Buttons */}
-            <div className="fixed bottom-24 right-5 z-40 flex flex-col items-center gap-3">
-
-                {/* Confirm Delete FAB */}
-                {isDeleteMode && selectedIds.length > 0 && (
-                    <button
-                        onClick={handleBatchDeleteClick}
-                        className="size-14 rounded-full bg-red-500 shadow-[0_4px_14px_rgba(239,68,68,0.4)] flex items-center justify-center text-white active:scale-95 transition-all animate-in zoom-in-50 duration-200"
-                    >
-                        <span className="material-symbols-outlined text-[32px]">check</span>
-                    </button>
-                )}
-
-                <button
-                    onClick={toggleDeleteMode}
-                    className={cn(
-                        "rounded-full shadow-lg flex items-center justify-center transition-all duration-300 bg-white border border-gray-100",
-                        isDeleteMode
-                            ? "size-10 text-gray-500 hover:text-gray-800"
-                            : "size-10 text-gray-400 hover:text-red-500"
-                    )}
-                    title={isDeleteMode ? "Cancel" : "Delete Mode"}
-                >
-                    <span className={cn("material-symbols-outlined", isDeleteMode ? "text-[22px]" : "text-[20px]")}>
-                        {isDeleteMode ? "close" : "delete"}
-                    </span>
-                </button>
-            </div>
-
-            {/* Custom Delete Confirmation Modal */}
-            {showDeleteConfirm && (
-                <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/20 backdrop-blur-[2px] animate-in fade-in duration-200">
-                    <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-[320px] p-6 animate-in zoom-in-95 duration-200 border border-white/20">
-                        <div className="size-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mb-4 mx-auto">
-                            <span className="material-symbols-outlined text-[28px]">delete</span>
-                        </div>
-                        <h3 className="text-lg font-bold text-gray-900 mb-2 text-center font-display">Delete Stock Items?</h3>
-                        <p className="text-xs font-medium text-gray-500 mb-6 text-center leading-relaxed">
-                            Are you sure you want to delete <strong className="text-gray-800">{selectedIds.length}</strong> selected items? <br />This action cannot be undone.
-                        </p>
-                        <div className="flex gap-3">
-                            <button
-                                onClick={() => setShowDeleteConfirm(false)}
-                                className="flex-1 h-11 flex items-center justify-center rounded-xl bg-gray-50 text-gray-600 font-bold text-xs hover:bg-gray-100 transition-colors"
-                            >
-                                Cancel
-                            </button>
-                            <button
-                                onClick={confirmDelete}
-                                className="flex-1 h-11 flex items-center justify-center rounded-xl bg-red-500 text-white font-bold text-xs hover:bg-red-600 shadow-[0_4px_12px_rgba(239,68,68,0.3)] transition-all active:scale-95"
-                            >
-                                Delete
-                            </button>
-                        </div>
-                    </div>
-                </div>
-            )}
         </div>
     );
 }

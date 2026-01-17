@@ -3,7 +3,7 @@
 import React, { useState } from 'react';
 import Link from 'next/link';
 import AppHeader from '@/components/AppHeader';
-import CustomDatePicker from '@/components/CustomDatePicker';
+import DateNavigator from '@/components/DateNavigator';
 import { clsx, type ClassValue } from 'clsx';
 import { twMerge } from 'tailwind-merge';
 import { useData } from '@/context/DataContext';
@@ -23,8 +23,7 @@ export default function PlanningPage() {
     const [selectedIds, setSelectedIds] = useState<string[]>([]);
     const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
 
-    // Date Navigation helpers
-    const getDisplayDate = (dateStr: string) => {
+    const formatDateForDisplay = (dateStr: string) => {
         const date = new Date(dateStr);
         return date.toLocaleDateString('en-US', {
             weekday: 'short',
@@ -33,17 +32,7 @@ export default function PlanningPage() {
         }).toUpperCase();
     };
 
-    const handlePrevDate = () => {
-        const date = new Date(currentDate);
-        date.setDate(date.getDate() - 1);
-        setCurrentDate(date.toISOString().split('T')[0]);
-    };
 
-    const handleNextDate = () => {
-        const date = new Date(currentDate);
-        date.setDate(date.getDate() + 1);
-        setCurrentDate(date.toISOString().split('T')[0]);
-    };
 
     // Filter Logic
     const filteredAssignments = orders.filter(item => {
@@ -58,7 +47,11 @@ export default function PlanningPage() {
         const matchesStatus = filterStatus === 'All' || item.status === filterStatus;
         const matchesMachine = filterMachine === 'All' || item.machine === filterMachine;
 
-        return matchesSearch && matchesStatus && matchesMachine;
+        // Hide COMPLETED items during Delete Mode
+        // because users can only delete non-completed plans
+        const matchesDeleteMode = !isDeleteMode || item.status !== 'COMPLETED';
+
+        return matchesSearch && matchesStatus && matchesMachine && matchesDeleteMode;
     });
 
     // Selection Logic
@@ -97,28 +90,12 @@ export default function PlanningPage() {
 
                 {/* Date Navigator */}
                 {/* Date Navigator */}
-                <div className={cn("py-3 transition-opacity", isDeleteMode ? "opacity-50 pointer-events-none" : "opacity-100")}>
-                    <div className="flex items-center justify-between bg-white p-1 rounded-xl border border-gray-200 shadow-sm relative">
-                        <button onClick={handlePrevDate} disabled={isDeleteMode} className="size-9 flex items-center justify-center rounded-lg hover:bg-gray-50 text-gray-400 active:scale-95 transition-transform z-10">
-                            <span className="material-symbols-outlined text-[20px]">chevron_left</span>
-                        </button>
-
-                        <CustomDatePicker
-                            value={currentDate}
-                            onChange={setCurrentDate}
-                            disabled={isDeleteMode}
-                            customInput={
-                                <button disabled={isDeleteMode} className="flex items-center gap-2 text-primary relative px-4 py-1 hover:bg-gray-50 rounded-lg transition-colors">
-                                    <span className="material-symbols-outlined text-[20px]">calendar_month</span>
-                                    <span className="text-sm font-bold font-display uppercase tracking-widest">{getDisplayDate(currentDate)}</span>
-                                </button>
-                            }
-                        />
-
-                        <button onClick={handleNextDate} disabled={isDeleteMode} className="size-9 flex items-center justify-center rounded-lg hover:bg-gray-50 text-gray-400 active:scale-95 transition-transform z-10">
-                            <span className="material-symbols-outlined text-[20px]">chevron_right</span>
-                        </button>
-                    </div>
+                <div className={cn("pt-1 pb-0 transition-opacity", isDeleteMode ? "opacity-50 pointer-events-none" : "opacity-100")}>
+                    <DateNavigator
+                        currentDate={currentDate}
+                        setCurrentDate={setCurrentDate}
+                        disabled={isDeleteMode}
+                    />
                 </div>
 
                 {/* Search & Filter Row */}
@@ -159,7 +136,7 @@ export default function PlanningPage() {
                                             "px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-colors whitespace-nowrap",
                                             filterStatus === status
                                                 ? "bg-primary border-primary text-white"
-                                                : "bg-white border-gray-200 text-gray-500"
+                                                : "bg-white border-gray-200 text-primary/70 hover:text-primary"
                                         )}
                                     >
                                         {status}
@@ -180,7 +157,7 @@ export default function PlanningPage() {
                                             "px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-colors whitespace-nowrap",
                                             filterMachine === machine
                                                 ? "bg-primary border-primary text-white"
-                                                : "bg-white border-gray-200 text-gray-500"
+                                                : "bg-white border-gray-200 text-primary/70 hover:text-primary"
                                         )}
                                     >
                                         {machine}
@@ -270,7 +247,7 @@ export default function PlanningPage() {
                         </div>
                         <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest mb-1.5">No Plans Found</h3>
                         <p className="text-xs font-medium text-gray-400 text-center max-w-[200px] leading-relaxed">
-                            No assignments scheduled for <br /><span className="text-primary font-bold mt-1 block">{getDisplayDate(currentDate)}</span>
+                            No assignments scheduled for <br /><span className="text-primary font-bold mt-1 block">{formatDateForDisplay(currentDate)}</span>
                         </p>
                     </div>
                 )}
