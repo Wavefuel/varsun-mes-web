@@ -4,12 +4,25 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useData } from '@/context/DataContext';
 import { toast } from 'sonner';
-import { cn } from '@/lib/utils';
+import { fetchDeviceList, readDeviceStateEventGroupsWithItems, type DeviceSummary } from '@/utils/scripts';
+import type { Order } from '@/lib/types';
+
+type ApiEventItem = {
+    segmentStart?: string | null;
+    segmentEnd?: string | null;
+    metadata?: Record<string, unknown> | null;
+};
+
+type ApiEventGroup = {
+    id: string;
+    deviceId: string;
+    Items?: ApiEventItem[] | null;
+};
 
 export default function CompleteOrderPage() {
     const router = useRouter();
     const params = useParams();
-    const { getOrderById, updateOrder } = useData();
+    const { getOrderById, updateOrder, addOrder, currentDate } = useData();
 
     // Handle array or string param
     const rawId = params?.id;
@@ -17,7 +30,7 @@ export default function CompleteOrderPage() {
     const orderId = idString ? decodeURIComponent(idString) : "";
 
     const [loading, setLoading] = useState(true);
-    const [order, setOrder] = useState<any>(null); // Using any temporarily for flexibility, but ideally Order type
+    const [order, setOrder] = useState<(Order & { workOrder?: string; deviceId?: string }) | null>(null);
 
     // Form State
     const [actualOutput, setActualOutput] = useState(0);
@@ -25,22 +38,128 @@ export default function CompleteOrderPage() {
     const [rejects, setRejects] = useState(0);
     const [remarks, setRemarks] = useState("");
 
+    const toIsoDayRange = (dateStr: string) => {
+        const base = new Date(dateStr);
+        if (Number.isNaN(base.getTime())) return null;
+        const start = new Date(base);
+        start.setHours(0, 0, 0, 0);
+        const end = new Date(base);
+        end.setHours(23, 59, 59, 999);
+        return { rangeStart: start.toISOString(), rangeEnd: end.toISOString() };
+    };
+
+    const deviceLabel = (device?: DeviceSummary) =>
+        device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
+
     useEffect(() => {
-        if (orderId) {
-            const data = getOrderById(orderId);
-            if (data) {
-                setOrder(data);
-                setActualOutput(data.actualOutput || 0);
-                setToolChanges(data.toolChanges || 0);
-                setRejects(data.rejects || 0);
-                setRemarks(data.remarks || "");
-            } else {
-                toast.error("Order not found");
-                router.push('/planning');
+        let cancelled = false;
+        (async () => {
+            if (!orderId) return;
+
+            // 1) Try local storage (DataContext)
+            const existing = getOrderById(orderId);
+            if (existing) {
+                if (cancelled) return;
+                setOrder(existing);
+                setActualOutput(existing.actualOutput || 0);
+                setToolChanges(existing.toolChanges || 0);
+                setRejects(existing.rejects || 0);
+                setRemarks(existing.remarks || "");
+                setLoading(false);
+                return;
             }
+
+            // 2) Fallback to API: search the groupId across device list for the selected day
+            const clusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID;
+            const accountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID;
+            const applicationId = process.env.NEXT_PUBLIC_APPLICATION_ID;
+            if (!clusterId || !accountId || !applicationId) {
+                if (!cancelled) {
+                    toast.error("Missing Lighthouse configuration");
+                    router.push('/planning');
+                }
+                return;
+            }
+
+            const range = toIsoDayRange(currentDate);
+            if (!range) {
+                if (!cancelled) {
+                    toast.error("Invalid date");
+                    router.push('/planning');
+                }
+                return;
+            }
+
+            const devices = await fetchDeviceList({ clusterId });
+            let found: ApiEventGroup | null = null;
+            let foundDevice: DeviceSummary | undefined = undefined;
+
+            for (const device of devices) {
+                const groupsUnknown = await readDeviceStateEventGroupsWithItems({
+                    deviceId: device.id,
+                    clusterId,
+                    applicationId,
+                    account: { id: accountId },
+                    query: { rangeStart: range.rangeStart, rangeEnd: range.rangeEnd },
+                });
+
+                const groups = (Array.isArray(groupsUnknown) ? groupsUnknown : []) as unknown as ApiEventGroup[];
+                const match = groups.find((g) => g?.id === orderId) ?? null;
+                if (match) {
+                    found = match;
+                    foundDevice = device;
+                    break;
+                }
+            }
+
+            if (!found) {
+                if (!cancelled) {
+                    toast.error("Order n found");
+                    router.push('/planning');
+                }
+                return;
+            }
+
+            const firstItem = Array.isArray(found.Items) ? found.Items[0] : null;
+            const metadata = (firstItem?.metadata && typeof firstItem.metadata === "object") ? firstItem.metadata : {};
+            const workOrder = typeof metadata.workOrder === "string" ? metadata.workOrder : String(metadata.workOrder ?? "");
+
+            const built: Order & { workOrder?: string; deviceId?: string } = {
+                id: orderId, // keep route id stable
+                workOrder,
+                deviceId: found.deviceId,
+                partNumber: String(metadata.partNumber ?? ""),
+                machine: deviceLabel(foundDevice) || String(found.deviceId ?? ""),
+                operator: String(metadata.operatorCode ?? ""),
+                date: currentDate,
+                shift: "Day (S1)",
+                startTime: firstItem?.segmentStart ? new Date(firstItem.segmentStart).toISOString().slice(11, 16) : "",
+                endTime: firstItem?.segmentEnd ? new Date(firstItem.segmentEnd).toISOString().slice(11, 16) : "",
+                code: String(metadata.operatorCode ?? ""),
+                opNumber: 0,
+                batch: Number(metadata.opBatchQty ?? 0),
+                estPart: String(metadata.estPartAdd ?? ""),
+                target: Number(metadata.opBatchQty ?? 1),
+                status: "ACTIVE",
+            };
+
+            if (cancelled) return;
+            setOrder(built);
+            setActualOutput(built.actualOutput || 0);
+            setToolChanges(built.toolChanges || 0);
+            setRejects(built.rejects || 0);
+            setRemarks(built.remarks || "");
             setLoading(false);
-        }
-    }, [orderId, getOrderById, router]);
+        })().catch((e) => {
+            console.error(e);
+            toast.error("Failed to load order");
+            router.push('/planning');
+        });
+
+        return () => {
+            cancelled = true;
+        };
+    }, [currentDate, getOrderById, orderId, router]);
 
     if (loading || !order) return null;
 
@@ -50,6 +169,12 @@ export default function CompleteOrderPage() {
     const progressPercent = Math.min((actualOutput / target) * 100, 100);
 
     const handleSave = () => {
+        // Ensure the order exists in local storage
+        const existing = getOrderById(orderId);
+        if (!existing && order) {
+            addOrder(order);
+        }
+
         updateOrder(orderId, {
             status: 'COMPLETED',
             actualOutput,
@@ -75,7 +200,7 @@ export default function CompleteOrderPage() {
                     <div className="flex-1 flex flex-col items-center justify-center">
                         <h1 className="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-0.5">Work Order</h1>
                         <div className="text-slate-800 font-bold text-base leading-tight flex items-center gap-2">
-                            {order.id}
+                            {order.workOrder ? order.workOrder : order.id}
                             <span className="text-gray-300 font-light">|</span>
                             {order.machine.split(' ')[0]}
                         </div>

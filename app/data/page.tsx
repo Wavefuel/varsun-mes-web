@@ -9,6 +9,8 @@ import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { useData } from "@/context/DataContext";
 
+import { fetchDeviceList, type DeviceSummary } from "@/utils/scripts";
+
 function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
 }
@@ -23,33 +25,24 @@ function getPseudoRandom(seed: string) {
 	return Math.abs(hash);
 }
 
-// Enhanced Machine Type
-interface Machine {
-	id: string;
-	name: string;
-	model: string;
-	serialNumber: string;
-	ipAddress: string;
-	location: string;
-}
-
-const MACHINE_INVENTORY: Machine[] = [
-	{ id: "CNC-01", name: "Vertical Mill A", model: "VF-2SS", serialNumber: "SN-2023-8842", ipAddress: "192.168.1.101", location: "Section A" },
-	{ id: "CNC-02", name: "Lathe Station", model: "ST-20", serialNumber: "SN-2023-9102", ipAddress: "192.168.1.102", location: "Section A" },
-	{ id: "CNC-03", name: "Precision Mill", model: "UMC-750", serialNumber: "SN-2022-4421", ipAddress: "192.168.1.105", location: "Section B" },
-	{ id: "ROBOT-01", name: "Assembly Arm", model: "KR-10", serialNumber: "RB-9921-X", ipAddress: "192.168.1.201", location: "Assembly" },
-	{ id: "PRESS-A1", name: "Hydraulic Press", model: "H-Frame 50T", serialNumber: "PR-5520-22", ipAddress: "192.168.1.150", location: "Forming" },
-];
-
 export default function EventsPage() {
 	const { currentDate, setCurrentDate } = useData();
 	const [searchQuery, setSearchQuery] = useState("");
 	const [showFilters, setShowFilters] = useState(false);
+	const [devices, setDevices] = useState<DeviceSummary[]>([]);
+
+	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID ?? "";
+
+	React.useEffect(() => {
+		if (!lhtClusterId) return;
+		fetchDeviceList({ clusterId: lhtClusterId }).then(setDevices).catch(console.error);
+	}, [lhtClusterId]);
 
 	// Filter Logic
-	const filteredMachines = MACHINE_INVENTORY.filter((m) => {
+	const filteredMachines = devices.filter((m) => {
 		const query = searchQuery.toLowerCase();
-		return m.name.toLowerCase().includes(query) || m.id.toLowerCase().includes(query) || m.serialNumber.toLowerCase().includes(query);
+		const name = m.deviceName || m.id;
+		return name.toLowerCase().includes(query) || m.id.toLowerCase().includes(query) || (m.serialNumber || "").toLowerCase().includes(query);
 	});
 
 	// Helper to generate dynamic status based on machine + date
@@ -106,7 +99,7 @@ export default function EventsPage() {
 								<div className="flex flex-col gap-0.5 flex-1">
 									{/* Primary ID + Status Dot */}
 									<div className="flex items-center gap-2">
-										<h3 className="list-title">{machine.id}</h3>
+										<h3 className="list-title">{machine.deviceName || machine.id}</h3>
 										<div
 											className={cn(
 												"size-2 rounded-full",
@@ -123,11 +116,11 @@ export default function EventsPage() {
 
 									{/* Secondary Name */}
 									<p className="list-subtext">
-										{machine.name} • {machine.model}
+										{machine.foreignId || machine.id}
 									</p>
 
 									{/* Serial Number */}
-									<p className="list-subtext">{machine.serialNumber}</p>
+									<p className="list-subtext">{machine.serialNumber || "No S/N"}</p>
 								</div>
 
 								{/* Right Column: Just the Call-to-action Metric */}

@@ -1,296 +1,655 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from 'react';
-import { useRouter, useSearchParams } from 'next/navigation';
-import { useData } from '@/context/DataContext';
-import { toast } from 'sonner';
-import { CustomToast } from '@/components/CustomToast';
-import AssignmentDetailsCard, { AssignmentFormData } from '@/components/AssignmentDetailsCard';
+import React, { Suspense, useCallback, useEffect, useMemo, useState } from "react";
+import { useRouter, useSearchParams } from "next/navigation";
+import { toast } from "sonner";
+
+import AssignmentDetailsCard, { type AssignmentFormData } from "@/components/AssignmentDetailsCard";
+import { CustomToast } from "@/components/CustomToast";
+import { useData } from "@/context/DataContext";
+import {
+	createDeviceStateEventGroup,
+	fetchDeviceList,
+	readDeviceStateEventGroupsWithItemsByCluster,
+	updateDeviceStateEventGroup,
+	type DeviceSummary,
+	type UpdateDeviceStateEventGroupData,
+} from "@/utils/scripts";
 
 function AssignmentForm() {
-    const router = useRouter();
-    const searchParams = useSearchParams();
-    const orderId = searchParams.get('id');
-    const isEditMode = !!orderId;
+	const router = useRouter();
+	const searchParams = useSearchParams();
 
-    const { addOrder, updateOrder, getOrderById, currentDate, setCurrentDate, orders } = useData();
+	const { addOrder, currentDate, getOrderById, orders, setCurrentDate, updateOrder } = useData();
 
-    // Consolidated Form Date State
-    const [formData, setFormData] = useState<AssignmentFormData>({
-        machine: "CNC-042 (Alpha)",
-        operator: "Marcus Jensen",
-        date: currentDate,
-        shift: "Day (S1)",
-        startTime: "06:00",
-        endTime: "14:00",
-        code: "SH-D24",
-        partNumber: "",
-        workOrderId: "",
-        opNumber: 20,
-        batch: 450,
-        estTime: "1.5",
-        estUnit: "min"
-    });
+	const orderId = searchParams.get("id");
+	const isEditMode = Boolean(orderId);
+	const queryDeviceId = searchParams.get("deviceId") ?? "";
+	const queryDate = searchParams.get("date") ?? "";
 
-    const [errors, setErrors] = useState<Record<string, boolean>>({});
+	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID ?? "";
+	const lhtAccountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID ?? "";
+	const lhtApplicationId = process.env.NEXT_PUBLIC_APPLICATION_ID ?? "";
 
-    // Load data for edit mode
-    useEffect(() => {
-        if (isEditMode && orderId) {
-            const order = getOrderById(orderId);
-            if (order) {
-                let estTime = "1.5";
-                let estUnit = "min";
+	const [devices, setDevices] = useState<DeviceSummary[]>([]);
+	const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
 
-                // Parse estPart which is typically "1.5m" or "2h"
-                const est = order.estPart || "1.5m";
-                if (est.endsWith('h')) {
-                    estTime = est.replace('h', '');
-                    estUnit = 'hr';
-                } else {
-                    estTime = est.replace('m', '');
-                    estUnit = 'min';
-                }
+	// Form inputs state
+	const [machine, setMachine] = useState("CNC-042 (Alpha)");
+	const [operator, setOperator] = useState("Marcus Jensen");
+	const [date, setDate] = useState(() => queryDate || currentDate);
+	const [shift, setShift] = useState("Day Shift (S1)");
+	const [startTime, setStartTime] = useState("08:00");
+	const [endTime, setEndTime] = useState("20:00");
+	const [code, setCode] = useState("SH-D24");
+	const [partNumber, setPartNumber] = useState("");
+	const [workOrderId, setWorkOrderId] = useState("");
+	const [opNumber, setOpNumber] = useState(20);
+	const [batch, setBatch] = useState(450);
+	const [estTime, setEstTime] = useState("1.5");
+	const [estUnit, setEstUnit] = useState<"min" | "hr">("min");
+	const [errors, setErrors] = useState<Record<string, boolean>>({});
 
-                setFormData({
-                    machine: order.machine,
-                    operator: order.operator,
-                    date: order.date,
-                    shift: order.shift,
-                    startTime: order.startTime,
-                    endTime: order.endTime,
-                    code: order.code || "SH-D24",
-                    partNumber: order.partNumber,
-                    workOrderId: order.id,
-                    opNumber: order.opNumber || 20,
-                    batch: order.batch || 450,
-                    estTime,
-                    estUnit
-                });
-            } else {
-                toast.error("Order not found");
-                router.push('/planning');
-            }
-        } else if (!isEditMode) {
-            // Reset to defaults or globals for create mode if needed
-            if (formData.date !== currentDate) {
-                setFormData(prev => ({ ...prev, date: currentDate }));
-            }
-        }
-    }, [isEditMode, orderId, getOrderById, router, currentDate]);
+	// Needed for edit-mode updates (API item id is not the same as group id).
+	const [eventItemId, setEventItemId] = useState<string>("");
+	const [eventGroupId, setEventGroupId] = useState<string>("");
 
-    // Helper to update specific fields
-    const handleFieldChange = (field: keyof AssignmentFormData, value: any) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
+	const estPart = useMemo(() => `${estTime}${estUnit === "hr" ? "h" : "m"}`, [estTime, estUnit]);
 
-        // Clear specific errors on change
-        if (field === 'partNumber' && errors.partNumber) setErrors(prev => { const n = { ...prev }; delete n.partNumber; return n; });
-        if (field === 'workOrderId' && errors.workOrderId) setErrors(prev => { const n = { ...prev }; delete n.workOrderId; return n; });
-        if ((field === 'startTime' || field === 'endTime') && errors.shift) setErrors(prev => { const n = { ...prev }; delete n.shift; delete n.capacity; return n; });
-        if ((field === 'batch' || field === 'estTime') && errors.capacity) setErrors(prev => { const n = { ...prev }; delete n.capacity; return n; });
-    };
+	const deviceLabel = (device?: DeviceSummary) =>
+		device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
 
-    const handleSave = () => {
-        const newErrors: Record<string, boolean> = {};
-        if (!formData.partNumber) newErrors.partNumber = true;
-        if (!formData.workOrderId) newErrors.workOrderId = true;
+	useEffect(() => {
+		if (!lhtClusterId) return;
+		if (devices.length > 0) return; // Only fetch once
+		fetchDeviceList({ clusterId: lhtClusterId })
+			.then((result) => {
+				setDevices(result);
+				if (!selectedDeviceId) {
+					// Prefer explicit query deviceId (when coming from planning list).
+					const preferred =
+						queryDeviceId && queryDeviceId !== "ALL" ? result.find((d) => d.id === queryDeviceId) : undefined;
+					const pick = preferred ?? result[0];
+					if (pick) {
+						setSelectedDeviceId(pick.id);
+						setMachine(deviceLabel(pick));
+					}
+				}
+			})
+			.catch((error) => {
+				console.error(error);
+				toast.error("Failed to load devices");
+			});
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [lhtClusterId, queryDeviceId]);
 
-        if (Object.keys(newErrors).length > 0) {
-            setErrors(newErrors);
-            toast.custom((t) => (
-                <CustomToast
-                    t={t}
-                    title="Validation Error"
-                    message="Please complete all required fields to proceed."
-                />
-            ));
-            return;
-        }
+	const timeToMinutes = (value: string) => {
+		const [h, m] = value.split(":").map((p) => Number(p));
+		return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+	};
 
-        // Capacity Validation
-        const getMinutesFromTime = (timeStr: string) => {
-            const [hours, minutes] = timeStr.split(':').map(Number);
-            return hours * 60 + minutes;
-        };
+	const buildDateTimeIso = (dateValue: string, timeValue: string, dayOffset = 0) => {
+		if (!dateValue || !timeValue) return undefined;
+		const base = new Date(dateValue);
+		if (Number.isNaN(base.getTime())) return undefined;
+		const [hours, minutes] = timeValue.split(":").map((part) => Number(part));
+		base.setDate(base.getDate() + dayOffset);
+		base.setHours(Number.isFinite(hours) ? hours : 0, Number.isFinite(minutes) ? minutes : 0, 0, 0);
+		return base.toISOString();
+	};
 
-        const startMin = getMinutesFromTime(formData.startTime);
-        let endMin = getMinutesFromTime(formData.endTime);
-        // Handle overnight shift (e.g., 22:00 to 06:00)
-        if (endMin < startMin) {
-            endMin += 24 * 60;
-        }
+	const buildSegmentRangeIso = (dateValue: string, startHHMM: string, endHHMM: string) => {
+		const start = buildDateTimeIso(dateValue, startHHMM, 0);
+		if (!start) return null;
+		const overnight = timeToMinutes(endHHMM) <= timeToMinutes(startHHMM);
+		const end = buildDateTimeIso(dateValue, endHHMM, overnight ? 1 : 0);
+		if (!end) return null;
+		return { start, end };
+	};
 
-        const shiftDurationMinutes = endMin - startMin;
+	const isNightShift = (value: string) => /night/i.test(value) || /S2/i.test(value);
 
-        let estPerPartMinutes = parseFloat(formData.estTime);
-        if (formData.estUnit === 'hr') {
-            estPerPartMinutes *= 60;
-        }
+	const getShiftWindow = (value: string) => {
+		if (/custom/i.test(value)) return { start: startTime, end: endTime };
+		return isNightShift(value) ? { start: "20:00", end: "08:00" } : { start: "08:00", end: "20:00" };
+	};
 
-        const totalRequiredMinutes = formData.batch * estPerPartMinutes;
+	const toIsoDayRange = (dateStr: string) => {
+		const base = new Date(dateStr);
+		if (Number.isNaN(base.getTime())) return null;
+		const start = new Date(base);
+		start.setHours(0, 0, 0, 0);
+		const end = new Date(base);
+		end.setHours(23, 59, 59, 999);
+		return { rangeStart: start.toISOString(), rangeEnd: end.toISOString() };
+	};
 
-        if (totalRequiredMinutes > shiftDurationMinutes) {
-            const reqHrs = Math.floor(totalRequiredMinutes / 60);
-            const reqMins = Math.round(totalRequiredMinutes % 60);
+	const toTimeHHMM = (value?: string | null) => {
+		if (!value) return "";
+		const d = new Date(value);
+		if (Number.isNaN(d.getTime())) return "";
+		return d.toISOString().slice(11, 16);
+	};
 
-            const shiftHrs = Math.floor(shiftDurationMinutes / 60);
-            const shiftMins = Math.round(shiftDurationMinutes % 60);
+	useEffect(() => {
+		let cancelled = false;
+		(async () => {
+			if (!isEditMode || !orderId) return;
 
-            setErrors(prev => ({ ...prev, capacity: true, shift: true }));
+			// 1) Prefer local storage (if we previously created this order locally).
+			const existing = getOrderById(orderId);
+			if (existing) {
+				if (cancelled) return;
+				setMachine(existing.machine);
+				setOperator(existing.operator);
+				setDate(existing.date);
+				setShift(existing.shift);
+				setStartTime(existing.startTime);
+				setEndTime(existing.endTime);
+				setCode(existing.code || "SH-D24");
+				setPartNumber(existing.partNumber);
+				setWorkOrderId(existing.id);
+				setOpNumber(existing.opNumber || 20);
+				setBatch(existing.batch || 450);
 
-            toast.custom((t) => (
-                <CustomToast
-                    t={t}
-                    title="Capacity Limit Exceeded"
-                    message={
-                        <span>
-                            Required time <span className="font-bold">{reqHrs}h {reqMins}m</span> exceeds shift duration <span className="font-bold">{shiftHrs}h {shiftMins}m</span>.
-                        </span>
-                    }
-                    actions="Try reducing Batch Qty/Est. Part or extending Shift."
-                />
-            ), { duration: 10000 });
-            return;
-        }
+				const parsedEst = existing.estPart || "1.5m";
+				if (parsedEst.endsWith("h")) {
+					setEstUnit("hr");
+					setEstTime(parsedEst.replace(/h$/, ""));
+				} else {
+					setEstUnit("min");
+					setEstTime(parsedEst.replace(/m$/, ""));
+				}
 
-        // Clear capacity error if validation passes - logic already mostly simplified by re-render, but explicit clear is safe
-        if (errors.capacity || errors.shift) {
-            setErrors(prev => {
-                const newErrors = { ...prev };
-                delete newErrors.capacity;
-                delete newErrors.shift;
-                return newErrors;
-            });
-        }
+				if (existing.lhtDeviceId) setSelectedDeviceId(existing.lhtDeviceId);
+				return;
+			}
 
-        const orderData = {
-            partNumber: formData.partNumber,
-            machine: formData.machine,
-            operator: formData.operator,
-            date: formData.date,
-            shift: formData.shift,
-            startTime: formData.startTime,
-            endTime: formData.endTime,
-            code: formData.code,
-            opNumber: formData.opNumber,
-            batch: formData.batch,
-            estPart: `${formData.estTime}${formData.estUnit === 'min' ? 'm' : 'h'}`,
-            target: formData.batch,
-        };
+			// 2) API fallback (load group + item from Lighthouse).
+			if (!lhtClusterId || !lhtAccountId || !lhtApplicationId) {
+				toast.error("Missing Lighthouse configuration");
+				router.push("/planning");
+				return;
+			}
 
-        if (isEditMode && orderId) {
-            updateOrder(orderId, orderData);
-            toast.success("Assignment updated");
-        } else {
-            addOrder({
-                id: formData.workOrderId,
-                ...orderData,
-                status: 'PLANNED'
-            });
-            // Update the global date to match the new assignment
-            if (formData.date !== currentDate) {
-                setCurrentDate(formData.date);
-            }
-        }
+			const selectedDate = queryDate || date || currentDate;
+			const range = toIsoDayRange(selectedDate);
+			if (!range) {
+				toast.error("Invalid date");
+				router.push("/planning");
+				return;
+			}
 
-        router.push('/planning');
-    };
+			const deviceList = devices.length ? devices : await fetchDeviceList({ clusterId: lhtClusterId });
+			if (!cancelled && !devices.length) setDevices(deviceList);
 
-    return (
-        <div className="flex flex-col min-h-screen bg-background-dashboard font-display">
+			const groupsUnknown = await readDeviceStateEventGroupsWithItemsByCluster({
+				clusterId: lhtClusterId,
+				applicationId: lhtApplicationId,
+				account: { id: lhtAccountId },
+				query: { rangeStart: range.rangeStart, rangeEnd: range.rangeEnd },
+				deviceId: queryDeviceId && queryDeviceId !== "ALL" ? queryDeviceId : undefined,
+			});
 
-            {/* Top Navigation Bar */}
-            <header className="sticky top-0 z-50 bg-white border-b border-gray-200 h-[var(--header-height)] px-4 py-2">
-                <div className="flex items-center justify-between h-full">
-                    <div className="flex flex-col">
-                        <h2 className="header-title">{isEditMode ? 'Edit Assignment' : 'Shift Assignment'}</h2>
-                        <p className="header-subtitle mt-0.5 uppercase block">Planning</p>
-                    </div>
-                    <div className="flex items-center gap-3">
-                        <button
-                            onClick={() => router.back()}
-                            className="text-gray-500 font-bold text-xs uppercase hover:text-gray-700 active:scale-95 transition-transform"
-                        >
-                            Cancel
-                        </button>
-                        <button
-                            onClick={handleSave}
-                            className="bg-primary text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow-sm active:scale-95 transition-transform"
-                        >
-                            SAVE
-                        </button>
-                    </div>
-                </div>
-            </header>
+			type ApiEventItem = {
+				id?: string;
+				segmentStart?: string | null;
+				segmentEnd?: string | null;
+				metadata?: Record<string, unknown> | null;
+			};
+			type ApiEventGroup = {
+				id?: string;
+				deviceId?: string;
+				rangeStart?: string | null;
+				rangeEnd?: string | null;
+				Items?: ApiEventItem[] | null;
+			};
 
-            <main className="!p-4 !space-y-6 !pb-24">
+			const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
+			const foundGroup =
+				groups.find((g) => String(g?.id ?? "") === orderId) ??
+				groups.find((g) =>
+					(Array.isArray(g?.Items) ? g.Items : []).some((entry) => {
+						const md = entry?.metadata as Record<string, unknown> | undefined;
+						return String(md?.workOrder ?? "") === orderId;
+					}),
+				) ??
+				null;
+			if (!foundGroup) {
+				toast.error("Order not found");
+				router.push("/planning");
+				return;
+			}
 
-                {/* Reusable Assignment Card Component */}
-                <AssignmentDetailsCard
-                    title={isEditMode ? 'Assignment Details' : 'New Assignment'}
-                    icon={isEditMode ? 'edit_note' : 'precision_manufacturing'}
-                    data={formData}
-                    onChange={handleFieldChange}
-                    errors={errors}
-                    isEditMode={isEditMode}
-                    readOnly={false} // Always editable in Planning page
-                />
+			const item = Array.isArray(foundGroup.Items) ? foundGroup.Items[0] : null;
+			const metadata = item?.metadata ?? {};
+			setEventGroupId(String(foundGroup.id ?? ""));
 
-                {/* Section: Queue / Planned Assignments (Dynamic) - Hide in Edit Mode */}
-                {!isEditMode && (
-                    <section className="!space-y-3">
-                        <div className="flex items-center justify-between px-1">
-                            <h3 className="font-bold text-sm uppercase tracking-wider text-gray-600">Planned Queue <span className="text-gray-400 normal-case tracking-normal">({formData.machine.split(' ')[0]})</span></h3>
-                            <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded">
-                                {orders.filter(o => o.machine === formData.machine && o.date === formData.date && o.status !== 'COMPLETED').length} Tasks
-                            </span>
-                        </div>
-                        {/* Filtered Queue List */}
-                        <div className="!space-y-2">
-                            {orders.filter(o => o.machine === formData.machine && o.date === formData.date && o.status !== 'COMPLETED')
-                                .sort((a, b) => a.startTime.localeCompare(b.startTime))
-                                .map((order) => (
-                                    <div key={order.id} className="bg-white border border-gray-100 !p-3 rounded-lg flex items-center !gap-3">
-                                        <div className="size-10 bg-gray-100 rounded flex items-center justify-center shrink-0 text-gray-400">
-                                            <span className={`material-symbols-outlined !text-xl ${order.status === 'ACTIVE' ? '!text-primary' : '!text-gray-400'}`}>
-                                                {order.status === 'ACTIVE' ? 'play_circle' :
-                                                    order.status === 'PLANNED' ? 'pending' : 'check_circle'}
-                                            </span>
-                                        </div>
-                                        <div className="flex-1 min-w-0">
-                                            <div className="flex justify-between items-start">
-                                                <p className="font-bold text-sm truncate">{order.id} • {order.partNumber}</p>
-                                                <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${order.status === 'ACTIVE' ? 'text-green-600 bg-green-50' :
-                                                    order.status === 'COMPLETED' ? 'text-blue-600 bg-blue-50' :
-                                                        'text-gray-400 bg-gray-50'
-                                                    }`}>
-                                                    {order.status}
-                                                </span>
-                                            </div>
-                                            <p className="text-[11px] text-gray-500 font-medium">
-                                                Op {order.opNumber} • {order.operator.split(' ')[0]} • {order.shift}
-                                            </p>
-                                        </div>
-                                    </div>
-                                ))}
+			const foundDeviceId = String(foundGroup.deviceId ?? "");
+			const foundDevice = deviceList.find((d) => d.id === foundDeviceId);
+			const label = foundDevice ? deviceLabel(foundDevice) : foundDeviceId || "Unknown Device";
 
-                            {orders.filter(o => o.machine === formData.machine && o.date === formData.date && o.status !== 'COMPLETED').length === 0 && (
-                                <div className="text-center py-6 text-gray-400 text-xs italic bg-gray-50/50 rounded-lg border border-dashed border-gray-200">
-                                    No active queue for {formData.machine.split(' ')[0]} on this date.
-                                </div>
-                            )}
-                        </div>
-                    </section>
-                )}
-            </main>
-        </div>
-    );
+			const rs = typeof foundGroup.rangeStart === "string" ? new Date(foundGroup.rangeStart) : null;
+			const re = typeof foundGroup.rangeEnd === "string" ? new Date(foundGroup.rangeEnd) : null;
+			const isNight = rs && re && rs.toDateString() !== re.toDateString();
+
+			const m = metadata as Record<string, unknown>;
+			const workOrder = String(m.workOrder ?? "");
+			const pn = String(m.partNumber ?? "");
+			const oc = String(m.operatorCode ?? "");
+			const b = Number(m.opBatchQty ?? 450);
+			const ep = String(m.estPartAdd ?? "1.5m");
+
+			if (cancelled) return;
+			setSelectedDeviceId(foundDeviceId);
+			setMachine(label);
+			setDate(selectedDate);
+			setShift(isNight ? "Night Shift (S2)" : "Day Shift (S1)");
+			setStartTime(toTimeHHMM(item?.segmentStart ?? null) || "08:00");
+			setEndTime(toTimeHHMM(item?.segmentEnd ?? null) || "20:00");
+			setCode(oc || "SH-D24");
+			setPartNumber(pn);
+			setWorkOrderId(workOrder);
+			setBatch(Number.isFinite(b) ? b : 450);
+			setEventItemId(String(item?.id ?? ""));
+
+			if (ep.endsWith("h")) {
+				setEstUnit("hr");
+				setEstTime(ep.replace(/h$/, ""));
+			} else {
+				setEstUnit("min");
+				setEstTime(ep.replace(/m$/, ""));
+			}
+		})().catch((e) => {
+			console.error(e);
+			toast.error("Failed to load assignment");
+			router.push("/planning");
+		});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [
+		currentDate,
+		date,
+		devices,
+		getOrderById,
+		isEditMode,
+		lhtAccountId,
+		lhtApplicationId,
+		lhtClusterId,
+		orderId,
+		queryDate,
+		queryDeviceId,
+		router,
+	]);
+
+	const handleSave = async () => {
+		const newErrors: Record<string, boolean> = {};
+		if (!partNumber) newErrors.partNumber = true;
+		if (!workOrderId) newErrors.workOrderId = true;
+
+		if (Object.keys(newErrors).length > 0) {
+			setErrors(newErrors);
+			toast.error("Please complete all required fields");
+			return;
+		}
+
+		const groupWindow = getShiftWindow(shift);
+		const groupRange = buildSegmentRangeIso(date, groupWindow.start, groupWindow.end);
+		if (!groupRange) {
+			toast.error("Invalid shift window");
+			return;
+		}
+
+		const itemSegment = buildSegmentRangeIso(date, startTime, endTime);
+		if (!itemSegment) {
+			toast.error("Invalid start/end time");
+			return;
+		}
+
+		const groupStartMs = new Date(groupRange.start).getTime();
+		const groupEndMs = new Date(groupRange.end).getTime();
+		const itemStartMs = new Date(itemSegment.start).getTime();
+		const itemEndMs = new Date(itemSegment.end).getTime();
+		if (
+			!Number.isFinite(groupStartMs) ||
+			!Number.isFinite(groupEndMs) ||
+			!Number.isFinite(itemStartMs) ||
+			!Number.isFinite(itemEndMs) ||
+			itemStartMs < groupStartMs ||
+			itemEndMs > groupEndMs
+		) {
+			setErrors((prev) => ({ ...prev, shift: true }));
+			toast.error("Order time must be within the selected shift window");
+			return;
+		}
+
+		const durationMinutes = Math.round((groupEndMs - groupStartMs) / 60000);
+		let estPerPartMinutes = Number.parseFloat(estTime);
+		if (!Number.isFinite(estPerPartMinutes) || estPerPartMinutes <= 0) estPerPartMinutes = 0;
+		if (estUnit === "hr") estPerPartMinutes *= 60;
+
+		const totalRequiredMinutes = batch * estPerPartMinutes;
+		if (durationMinutes > 0 && estPerPartMinutes > 0 && totalRequiredMinutes > durationMinutes) {
+			const reqHrs = Math.floor(totalRequiredMinutes / 60);
+			const reqMins = Math.round(totalRequiredMinutes % 60);
+			const shiftHrs = Math.floor(durationMinutes / 60);
+			const shiftMins = Math.round(durationMinutes % 60);
+
+			setErrors((prev) => ({ ...prev, capacity: true, shift: true }));
+			toast.custom(
+				(t) => (
+					<CustomToast
+						t={t}
+						title="Capacity Limit Exceeded"
+						message={
+							<span>
+								Required time <span className="font-bold">{reqHrs}h {reqMins}m</span> exceeds shift duration{" "}
+								<span className="font-bold">{shiftHrs}h {shiftMins}m</span>.
+							</span>
+						}
+						actions="Try reducing Batch Qty/Est. Part or extending Shift."
+					/>
+				),
+				{ duration: 10000 },
+			);
+			return;
+		}
+
+		let lhtGroupId: string | undefined;
+		let lhtDeviceId: string | undefined;
+
+		// Lighthouse write (optional; app can still work in local-only mode).
+		if (lhtClusterId && lhtAccountId && lhtApplicationId) {
+			if (!selectedDeviceId) {
+				toast.error("Please select a device");
+				return;
+			}
+
+			try {
+				if (isEditMode && orderId) {
+					const resolvedGroupId = eventGroupId || orderId;
+					const payload: UpdateDeviceStateEventGroupData = {
+						deviceId: selectedDeviceId,
+						clusterId: lhtClusterId,
+						groupId: resolvedGroupId,
+						applicationId: lhtApplicationId,
+						account: { id: lhtAccountId },
+						body: {
+							group: {
+								rangeStart: groupRange.start,
+								rangeEnd: groupRange.end,
+								title: `PLANNED-${date}`,
+							},
+							items: {
+								update: [
+									{
+										id: eventItemId || resolvedGroupId,
+										segmentStart: itemSegment.start,
+										segmentEnd: itemSegment.end,
+										category: "PLANNED",
+										operatorCode: code,
+										partNumber,
+										workOrder: workOrderId,
+										opBatchQty: batch,
+										estPartAdd: estPart,
+									},
+								],
+							},
+						},
+					};
+					await updateDeviceStateEventGroup(payload);
+					lhtGroupId = orderId;
+					lhtDeviceId = selectedDeviceId;
+				} else {
+					const created = await createDeviceStateEventGroup({
+						deviceId: selectedDeviceId,
+						clusterId: lhtClusterId,
+						applicationId: lhtApplicationId,
+						account: { id: lhtAccountId },
+						body: {
+							// Shift-wise group range (not full day)
+							rangeStart: groupRange.start,
+							rangeEnd: groupRange.end,
+							title: `PLANNED-${date}`,
+							items: [
+								{
+									segmentStart: itemSegment.start,
+									segmentEnd: itemSegment.end,
+									category: "PLANNED",
+									operatorCode: code,
+									partNumber,
+									workOrder: workOrderId,
+									opBatchQty: batch,
+									estPartAdd: estPart,
+								},
+							],
+						},
+					});
+
+					if (created && typeof created === "object") {
+						const maybeCreated = created as Record<string, unknown>;
+						lhtGroupId = typeof maybeCreated.id === "string" ? maybeCreated.id : undefined;
+						lhtDeviceId = typeof maybeCreated.deviceId === "string" ? maybeCreated.deviceId : selectedDeviceId;
+					} else {
+						lhtDeviceId = selectedDeviceId;
+					}
+				}
+			} catch (error) {
+				console.error(error);
+				toast.error(isEditMode ? "Failed to update assignment" : "Failed to save assignment");
+				return;
+			}
+		} else {
+			toast.message("Saved locally (Lighthouse not configured)");
+		}
+
+		const orderData = {
+			partNumber,
+			machine,
+			operator,
+			date,
+			shift,
+			startTime,
+			endTime,
+			code,
+			opNumber,
+			batch,
+			estPart,
+			target: batch,
+			status: "PLANNED" as const,
+			lhtDeviceId,
+			lhtGroupId,
+		};
+
+		// Store locally keyed by Work Order id.
+		const existing = getOrderById(workOrderId);
+		if (existing) {
+			updateOrder(workOrderId, orderData);
+		} else {
+			addOrder({ id: workOrderId, ...orderData });
+		}
+
+		if (date !== currentDate) setCurrentDate(date);
+
+		toast.success(isEditMode ? "Assignment updated" : "Assignment saved");
+		router.push("/planning");
+	};
+
+	const formData = useMemo<AssignmentFormData>(
+		() => ({
+			machine,
+			operator,
+			date,
+			shift,
+			startTime,
+			endTime,
+			code,
+			partNumber,
+			workOrderId,
+			opNumber,
+			batch,
+			estTime,
+			estUnit,
+		}),
+		[batch, code, date, endTime, estTime, estUnit, machine, opNumber, operator, partNumber, shift, startTime, workOrderId],
+	);
+
+	const handleFormChange = useCallback((field: keyof AssignmentFormData, value: unknown) => {
+		switch (field) {
+			case "machine":
+				setMachine(value as string);
+				break;
+			case "operator":
+				setOperator(value as string);
+				break;
+			case "date":
+				setDate(value as string);
+				break;
+			case "shift":
+				setShift(value as string);
+				break;
+			case "startTime":
+				setStartTime(value as string);
+				break;
+			case "endTime":
+				setEndTime(value as string);
+				break;
+			case "code":
+				setCode(value as string);
+				break;
+			case "partNumber":
+				setPartNumber(value as string);
+				if (errors.partNumber) setErrors((prev) => ({ ...prev, partNumber: false }));
+				break;
+			case "workOrderId":
+				setWorkOrderId(value as string);
+				if (errors.workOrderId) setErrors((prev) => ({ ...prev, workOrderId: false }));
+				break;
+			case "opNumber":
+				setOpNumber(value as number);
+				break;
+			case "batch":
+				setBatch(value as number);
+				if (errors.capacity) setErrors((prev) => { const next = { ...prev }; delete next.capacity; return next; });
+				break;
+			case "estTime":
+				setEstTime(value as string);
+				if (errors.capacity) setErrors((prev) => { const next = { ...prev }; delete next.capacity; return next; });
+				break;
+			case "estUnit":
+				setEstUnit(value as "min" | "hr");
+				break;
+		}
+	}, [errors.capacity, errors.partNumber, errors.workOrderId]);
+
+	const handleDeviceChange = useCallback((deviceId: string) => {
+		setSelectedDeviceId(deviceId);
+		const device = devices.find((d) => d.id === deviceId);
+		setMachine(deviceLabel(device));
+	}, [devices]);
+
+	return (
+		<div className="flex flex-col min-h-screen bg-background-dashboard font-display">
+			<header className="sticky top-0 z-50 bg-white border-b border-gray-200 h-(--header-height) px-4 py-2">
+				<div className="flex items-center justify-between h-full">
+					<div className="flex flex-col">
+						<h2 className="header-title">{isEditMode ? "Edit Assignment" : "Shift Assignment"}</h2>
+						<p className="header-subtitle mt-0.5 uppercase block">Planning</p>
+					</div>
+					<div className="flex items-center gap-3">
+						<button
+							onClick={() => router.back()}
+							className="text-gray-500 font-bold text-xs uppercase hover:text-gray-700 active:scale-95 transition-transform"
+						>
+							Cancel
+						</button>
+						<button
+							onClick={handleSave}
+							className="bg-primary text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow-sm active:scale-95 transition-transform"
+						>
+							SAVE
+						</button>
+					</div>
+				</div>
+			</header>
+
+			<main className="p-4 space-y-6 pb-24">
+				<AssignmentDetailsCard
+					title={isEditMode ? "Assignment Details" : "New Assignment"}
+					icon={isEditMode ? "edit_note" : "precision_manufacturing"}
+					data={formData}
+					onChange={handleFormChange}
+					errors={errors}
+					readOnly={false}
+					isEditMode={isEditMode}
+					devices={devices}
+					selectedDeviceId={selectedDeviceId}
+					onDeviceChange={handleDeviceChange}
+				/>
+
+				{!isEditMode && (
+					<section className="space-y-2">
+						<div className="flex items-center justify-between px-1">
+							<h3 className="font-bold text-sm uppercase tracking-wider text-gray-600">
+								Planned Queue <span className="text-gray-400 normal-case tracking-normal">({machine.split(" ")[0]})</span>
+							</h3>
+							<span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded">
+								{orders.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED").length} Tasks
+							</span>
+						</div>
+						<div className="space-y-2">
+							{orders
+								.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED")
+								.sort((a, b) => a.startTime.localeCompare(b.startTime))
+								.map((order) => (
+									<div key={order.id} className="bg-white border border-gray-100 p-3 rounded-lg flex items-center gap-3">
+										<div className="size-10 bg-gray-100 rounded flex items-center justify-center shrink-0 text-gray-400">
+											<span className="material-symbols-outlined text-xl">
+												{order.status === "ACTIVE" ? "play_circle" : order.status === "COMPLETED" ? "check_circle" : "schedule"}
+											</span>
+										</div>
+										<div className="flex-1 min-w-0">
+											<div className="flex justify-between items-start">
+												<p className="font-bold text-sm truncate text-gray-800">
+													{order.id} • {order.partNumber}
+												</p>
+												<span
+													className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${order.status === "ACTIVE"
+														? "text-green-600 bg-green-50"
+														: order.status === "COMPLETED"
+															? "text-blue-600 bg-blue-50"
+															: "text-gray-400 bg-gray-50"
+														}`}
+												>
+													{order.status}
+												</span>
+											</div>
+											<p className="text-[11px] text-gray-500 font-medium">
+												Op {order.opNumber} • {order.operator.split(" ")[0]} • {order.shift}
+											</p>
+										</div>
+									</div>
+								))}
+
+							{orders.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED").length === 0 && (
+								<div className="text-center py-6 text-gray-400 text-xs italic bg-gray-50/50 rounded-lg border border-dashed border-gray-200">
+									No active queue for {machine.split(" ")[0]} on this date.
+								</div>
+							)}
+						</div>
+					</section>
+				)}
+			</main>
+		</div>
+	);
 }
 
 export default function CreateAssignmentPage() {
-    return (
-        <Suspense fallback={<div>Loading...</div>}>
-            <AssignmentForm />
-        </Suspense>
-    );
+	return (
+		<Suspense fallback={<div>Loading...</div>}>
+			<AssignmentForm />
+		</Suspense>
+	);
 }

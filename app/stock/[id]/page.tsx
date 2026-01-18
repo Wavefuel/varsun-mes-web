@@ -1,143 +1,463 @@
 "use client";
 
-import React, { useState, useEffect, Suspense } from "react";
-import { useRouter, useParams } from "next/navigation";
-import { useData } from "@/context/DataContext";
+import React, { Suspense, useEffect, useState } from "react";
+import { useParams, useRouter, useSearchParams } from "next/navigation";
 import { toast } from "sonner";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
-import AssignmentDetailsCard, { AssignmentFormData } from "@/components/AssignmentDetailsCard";
-import { NumberCounter } from "@/components/ui/NumberCounter";
 
-function cn(...inputs: ClassValue[]) {
-	return twMerge(clsx(inputs));
-}
+import AssignmentDetailsCard, { type AssignmentFormData } from "@/components/AssignmentDetailsCard";
+import { NumberCounter } from "@/components/ui/NumberCounter";
+import { useData } from "@/context/DataContext";
+import type { Order } from "@/lib/types";
+import { createDeviceStateEventGroup, fetchDeviceList, readDeviceStateEventGroupsWithItemsByCluster, updateDeviceStateEventGroupItems, type DeviceSummary } from "@/utils/scripts";
+
+type ApiEventItem = {
+	id?: string;
+	category?: string | null;
+	segmentStart?: string | null;
+	segmentEnd?: string | null;
+	metadata?: Record<string, unknown> | null;
+};
+
+type ApiEventGroup = {
+	id?: string;
+	deviceId?: string;
+	rangeStart?: string | null;
+	rangeEnd?: string | null;
+	Items?: ApiEventItem[] | null;
+};
 
 function StockEntryForm() {
 	const router = useRouter();
 	const params = useParams();
-	// In strict Edit Mode, ID is required from URL parameters
+	const searchParams = useSearchParams();
+
 	const rawId = params?.id;
 	const idString = Array.isArray(rawId) ? rawId[0] : rawId;
 	const orderId = idString ? decodeURIComponent(idString) : "";
 
-	// Always strict edit mode
-	const isEditMode = true;
+	const queryDeviceId = searchParams?.get("deviceId") ?? "";
+	const queryDate = searchParams?.get("date") ?? "";
 
-	const { getOrderById, updateOrder } = useData();
+	const { addOrder, getOrderById, updateOrder } = useData();
 
-	const [loading, setLoading] = useState(true);
-	const [order, setOrder] = useState<any>(null);
+	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID ?? "";
+	const lhtAccountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID ?? "";
+	const lhtApplicationId = process.env.NEXT_PUBLIC_APPLICATION_ID ?? "";
+	const lighthouseEnabled = Boolean(lhtClusterId && lhtAccountId && lhtApplicationId);
+
+	const orderFromContext = orderId ? getOrderById(orderId) : undefined;
+	const [resolvedOrder, setResolvedOrder] = useState<Order | null>(null);
+	const [devices, setDevices] = useState<DeviceSummary[]>([]);
+	// Initialize itemCategory from context if available, since API fetch may be skipped when orderFromContext exists
+	const [itemCategory, setItemCategory] = useState<string>(() => {
+		if (orderFromContext?.status) {
+			return orderFromContext.status.toUpperCase();
+		}
+		return "PLANNED";
+	});
+	// Initialize eventGroupId from context if available
+	const [eventGroupId, setEventGroupId] = useState<string>(() => orderFromContext?.lhtGroupId ?? "");
+	const [eventItemId, setEventItemId] = useState<string>("");
+	const [groupRangeStart, setGroupRangeStart] = useState<string>("");
+	const [groupRangeEnd, setGroupRangeEnd] = useState<string>("");
+
+	const parseEst = (est: string) => {
+		if (est.endsWith("h")) return { estTime: est.replace(/h$/, ""), estUnit: "hr" as const };
+		return { estTime: est.replace(/m$/, ""), estUnit: "min" as const };
+	};
 
 	// Completion Form State
-	const [actualOutput, setActualOutput] = useState(0);
-	const [toolChanges, setToolChanges] = useState(0);
-	const [rejects, setRejects] = useState(0);
-	const [actualStartTime, setActualStartTime] = useState("");
-	const [actualEndTime, setActualEndTime] = useState("");
-	const [remarks, setRemarks] = useState("");
+	const [actualOutput, setActualOutput] = useState(() => orderFromContext?.actualOutput || 0);
+	const [toolChanges, setToolChanges] = useState(() => orderFromContext?.toolChanges || 0);
+	const [rejects, setRejects] = useState(() => orderFromContext?.rejects || 0);
+	const [actualStartTime, setActualStartTime] = useState(() => orderFromContext?.actualStartTime || orderFromContext?.startTime || "");
+	const [actualEndTime, setActualEndTime] = useState(() => orderFromContext?.actualEndTime || orderFromContext?.endTime || "");
+	const [remarks, setRemarks] = useState(() => orderFromContext?.remarks || "");
 	const [isDetailsOpen, setIsDetailsOpen] = useState(false);
 
-	// Read-only Details State
-	const [formData, setFormData] = useState<AssignmentFormData>({
-		machine: "",
-		operator: "",
-		date: "",
-		shift: "",
-		startTime: "",
-		endTime: "",
-		code: "",
-		partNumber: "",
-		workOrderId: "",
-		opNumber: 0,
-		batch: 0,
-		estTime: "",
-		estUnit: "min",
+	const [formData, setFormData] = useState<AssignmentFormData>(() => {
+		const o = orderFromContext;
+		if (!o) {
+			return {
+				machine: "",
+				operator: "",
+				date: "",
+				shift: "",
+				startTime: "",
+				endTime: "",
+				code: "",
+				partNumber: "",
+				workOrderId: "",
+				opNumber: 0,
+				batch: 0,
+				estTime: "",
+				estUnit: "min",
+			};
+		}
+		const { estTime, estUnit } = parseEst(o.estPart || "0m");
+		return {
+			machine: o.machine,
+			operator: o.operator,
+			date: o.date,
+			shift: o.shift,
+			startTime: o.startTime,
+			endTime: o.endTime,
+			code: o.code,
+			partNumber: o.partNumber,
+			workOrderId: o.id,
+			opNumber: o.opNumber,
+			batch: o.batch,
+			estTime,
+			estUnit,
+		};
 	});
 
+	const deviceLabel = (device?: DeviceSummary) =>
+		device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
+
+	const toIsoDayRange = (dateStr: string) => {
+		const base = new Date(dateStr);
+		if (Number.isNaN(base.getTime())) return null;
+		const start = new Date(base);
+		start.setHours(0, 0, 0, 0);
+		const end = new Date(base);
+		end.setHours(23, 59, 59, 999);
+		return { rangeStart: start.toISOString(), rangeEnd: end.toISOString() };
+	};
+
+	const toTimeHHMM = (value?: string | null) => {
+		if (!value) return "";
+		const d = new Date(value);
+		if (Number.isNaN(d.getTime())) return "";
+		return d.toISOString().slice(11, 16);
+	};
+
+	// Build ISO datetime: preserves date from baseDate, updates time from HH:MM string
+	const buildSegmentDateTime = (baseDate: string, timeHHMM: string) => {
+		if (!baseDate || !timeHHMM) return undefined;
+		const base = new Date(baseDate);
+		if (Number.isNaN(base.getTime())) return undefined;
+		const [hours, minutes] = timeHHMM.split(":").map((p) => Number(p));
+		base.setHours(Number.isFinite(hours) ? hours : 0, Number.isFinite(minutes) ? minutes : 0, 0, 0);
+		return base.toISOString();
+	};
+
 	useEffect(() => {
-		if (orderId) {
-			const data = getOrderById(orderId);
-			if (data) {
-				setOrder(data);
-
-				// Pre-fill completion data if it exists
-				setActualOutput(data.actualOutput || 0);
-				setToolChanges(data.toolChanges || 0);
-				setRejects(data.rejects || 0);
-				setActualStartTime(data.actualStartTime || data.startTime || "");
-				setActualEndTime(data.actualEndTime || data.endTime || "");
-				setRemarks(data.remarks || "");
-
-				// Initialize form data for the Details Card (Read-only view)
-				let estTime = "0";
-				let estUnit = "min";
-				const est = data.estPart || "0m";
-				if (est.endsWith("h")) {
-					estTime = est.replace("h", "");
-					estUnit = "hr";
-				} else {
-					estTime = est.replace("m", "");
-					estUnit = "min";
-				}
-
-				setFormData({
-					machine: data.machine,
-					operator: data.operator,
-					date: data.date,
-					shift: data.shift,
-					startTime: data.startTime,
-					endTime: data.endTime,
-					code: data.code,
-					partNumber: data.partNumber,
-					workOrderId: data.id,
-					opNumber: data.opNumber,
-					batch: data.batch,
-					estTime,
-					estUnit,
-				});
-			} else {
-				toast.error("Order not found");
-				router.push("/stock");
-			}
-		} else {
-			// Should not happen in strict [id] route unless manual navigation
+		if (!orderId) {
 			toast.error("Invalid Order ID");
 			router.push("/stock");
+			return;
 		}
-		setLoading(false);
-	}, [orderId, getOrderById, router]);
+		// Sync itemCategory and eventGroupId from orderFromContext when it's available
+		// This handles the case where context loads after initial render
+		if (orderFromContext) {
+			const statusFromContext = orderFromContext.status?.toUpperCase();
+			if (statusFromContext && statusFromContext !== itemCategory) {
+				console.log("[DEBUG] Syncing itemCategory from context:", statusFromContext);
+				setItemCategory(statusFromContext);
+			}
+			if (orderFromContext.lhtGroupId && orderFromContext.lhtGroupId !== eventGroupId) {
+				console.log("[DEBUG] Syncing eventGroupId from context:", orderFromContext.lhtGroupId);
+				setEventGroupId(orderFromContext.lhtGroupId);
+			}
+			// If we have context but no eventItemId, we still need to fetch from API to get it
+			// The eventItemId is required for updating existing items
+			if (eventItemId) {
+				return;
+			}
+			console.log("[DEBUG] eventItemId is missing, fetching from API...");
+		}
+		if (!lighthouseEnabled) {
+			toast.error("Order not found");
+			router.push("/stock");
+			return;
+		}
+
+		let cancelled = false;
+		(async () => {
+			// Use queryDate, or fall back to orderFromContext.date, or today
+			const selectedDate = queryDate || orderFromContext?.date || new Date().toISOString().split("T")[0];
+			const range = toIsoDayRange(selectedDate);
+			if (!range) {
+				toast.error("Invalid date");
+				router.push("/stock");
+				return;
+			}
+
+			const deviceList = await fetchDeviceList({ clusterId: lhtClusterId });
+			const groupsUnknown = await readDeviceStateEventGroupsWithItemsByCluster({
+				clusterId: lhtClusterId,
+				applicationId: lhtApplicationId,
+				account: { id: lhtAccountId },
+				query: { rangeStart: range.rangeStart, rangeEnd: range.rangeEnd },
+				deviceId: queryDeviceId && queryDeviceId !== "ALL" ? queryDeviceId : undefined,
+			});
+
+			const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
+
+			// Find all matching groups (by ID or Work Order)
+			const matchingGroups = groups.filter((g) => {
+				if (String(g?.id ?? "") === orderId) return true;
+				return (Array.isArray(g?.Items) ? g.Items : []).some((entry) => {
+					const md = entry?.metadata as Record<string, unknown> | undefined;
+					return String(md?.workOrder ?? "") === orderId;
+				});
+			});
+
+			// If multiple found, prefer the one that is COMPLETED
+			const foundGroup =
+				matchingGroups.find((g) => {
+					const item = Array.isArray(g.Items) ? g.Items[0] : null;
+					return String(item?.category || "").toUpperCase() === "COMPLETED";
+				}) ??
+				matchingGroups[0] ??
+				null;
+
+			if (!foundGroup) {
+				toast.error("Order not found");
+				router.push("/stock");
+				return;
+			}
+
+			const deviceId = String(foundGroup.deviceId ?? "");
+			const foundDevice = deviceList.find((d) => d.id === deviceId);
+			const item = Array.isArray(foundGroup.Items) ? foundGroup.Items[0] : null;
+			const metadata = item?.metadata ?? {};
+			const category = typeof item?.category === "string" ? String(item.category).toUpperCase() : "";
+			const status: Order["status"] = category === "COMPLETED" ? "COMPLETED" : "PLANNED";
+
+			const built: Order = {
+				id: orderId,
+				partNumber: String(metadata.partNumber ?? ""),
+				machine: deviceLabel(foundDevice) || deviceId || "Unknown Device",
+				operator: String(metadata.operatorCode ?? ""),
+				date: selectedDate,
+				shift: "Day Shift (S1)",
+				startTime: toTimeHHMM(item?.segmentStart ?? null) || "",
+				endTime: toTimeHHMM(item?.segmentEnd ?? null) || "",
+				code: String(metadata.operatorCode ?? ""),
+				opNumber: 0,
+				batch: Number(metadata.opBatchQty ?? 0),
+				estPart: String(metadata.estPartAdd ?? ""),
+				target: Number(metadata.opBatchQty ?? 1),
+				status,
+				lhtDeviceId: deviceId || undefined,
+				lhtGroupId: String(foundGroup.id ?? orderId),
+				actualOutput: Number(metadata.actualOutput ?? 0),
+				toolChanges: Number(metadata.toolChanges ?? 0),
+				rejects: Number(metadata.rejects ?? 0),
+				remarks: String(metadata.remarks ?? ""),
+				actualStartTime: String(metadata.actualStartTime ?? ""),
+				actualEndTime: String(metadata.actualEndTime ?? ""),
+			};
+
+			if (cancelled) return;
+			setResolvedOrder(built);
+			setEventItemId(String(item?.id ?? ""));
+			setEventGroupId(String(foundGroup.id ?? ""));
+			setDevices(deviceList);
+			setItemCategory(category || "PLANNED");
+			setGroupRangeStart(typeof foundGroup.rangeStart === "string" ? foundGroup.rangeStart : "");
+			setGroupRangeEnd(typeof foundGroup.rangeEnd === "string" ? foundGroup.rangeEnd : "");
+
+			// Seed local storage for future
+			addOrder(built);
+
+			setActualOutput(built.actualOutput || 0);
+			setToolChanges(built.toolChanges || 0);
+			setRejects(built.rejects || 0);
+			setRemarks(built.remarks || "");
+			setActualStartTime(built.actualStartTime || built.startTime || "");
+			setActualEndTime(built.actualEndTime || built.endTime || "");
+
+			const { estTime, estUnit } = parseEst(built.estPart || "0m");
+			setFormData({
+				machine: built.machine,
+				operator: built.operator,
+				date: built.date,
+				shift: built.shift,
+				startTime: built.startTime,
+				endTime: built.endTime,
+				code: built.code,
+				partNumber: built.partNumber,
+				workOrderId: built.id,
+				opNumber: built.opNumber,
+				batch: built.batch,
+				estTime,
+				estUnit,
+			});
+		})().catch((e) => {
+			console.error(e);
+			toast.error("Failed to load order");
+			router.push("/stock");
+		});
+
+		return () => {
+			cancelled = true;
+		};
+	}, [addOrder, eventGroupId, eventItemId, itemCategory, lighthouseEnabled, lhtAccountId, lhtApplicationId, lhtClusterId, orderFromContext, orderId, queryDate, queryDeviceId, router]);
+
+	// Fetch devices separately to ensure they're available for display
+	useEffect(() => {
+		if (!lhtClusterId) return;
+		if (devices.length > 0) return; // Already fetched
+		fetchDeviceList({ clusterId: lhtClusterId })
+			.then((result) => setDevices(result))
+			.catch((error) => console.error("Failed to load devices:", error));
+		// eslint-disable-next-line react-hooks/exhaustive-deps
+	}, [lhtClusterId]);
+
+	const order = orderFromContext ?? resolvedOrder;
+	const loading = Boolean(orderId && lighthouseEnabled && !orderFromContext && !resolvedOrder);
 
 	if (loading) return null;
-
 	if (!order) return null;
 
-	// Derived Values
 	const target = order.target || 1;
 	const efficiency = Math.round((actualOutput / target) * 100);
 	const visualEfficiency = Math.min(efficiency, 100);
 	const progressPercent = Math.min((actualOutput / target) * 100, 100);
 
-	const handleSave = () => {
-		if (orderId) {
-			updateOrder(orderId, {
-				status: "COMPLETED",
-				actualOutput,
-				toolChanges,
-				rejects,
-				actualStartTime,
-				actualEndTime,
-				remarks,
-			});
-			toast.success("Order completed successfully");
-			router.push("/stock");
+	const handleSave = async () => {
+		if (!orderId) return;
+
+		if (lighthouseEnabled && order.lhtDeviceId) {
+			try {
+				// Build segment times preserving date from group range, updating time portion
+				const baseDate = groupRangeStart || order.date;
+				let segmentStart = buildSegmentDateTime(baseDate, actualStartTime);
+				let segmentEnd = buildSegmentDateTime(baseDate, actualEndTime);
+
+				// Handle overnight logic (if End < Start, assume next day)
+				if (segmentStart && segmentEnd && new Date(segmentEnd) < new Date(segmentStart)) {
+					const end = new Date(segmentEnd);
+					end.setDate(end.getDate() + 1);
+					segmentEnd = end.toISOString();
+				}
+
+				// Build range from group or from order date
+				const range = groupRangeStart && groupRangeEnd
+					? { rangeStart: groupRangeStart, rangeEnd: groupRangeEnd }
+					: toIsoDayRange(order.date);
+
+				// For new groups (PLANNED), ensure range covers the segment end
+				if (itemCategory === "PLANNED" && range && segmentEnd && new Date(segmentEnd) > new Date(range.rangeEnd)) {
+					range.rangeEnd = segmentEnd;
+				}
+
+				console.log("[DEBUG] handleSave - itemCategory:", itemCategory, "eventGroupId:", eventGroupId, "eventItemId:", eventItemId);
+
+				if (itemCategory === "PLANNED") {
+					// PLANNED: Create a NEW group with category COMPLETED
+					const createdGroup = await createDeviceStateEventGroup({
+						deviceId: order.lhtDeviceId,
+						clusterId: lhtClusterId,
+						applicationId: lhtApplicationId,
+						account: { id: lhtAccountId },
+						body: {
+							rangeStart: range?.rangeStart,
+							rangeEnd: range?.rangeEnd,
+							title: `COMPLETED-${order.date}`,
+							items: [
+								{
+									segmentStart: segmentStart || actualStartTime,
+									segmentEnd: segmentEnd || actualEndTime,
+									category: "COMPLETED",
+									operatorCode: order.code,
+									partNumber: order.partNumber,
+									workOrder: order.id,
+									opBatchQty: order.batch,
+									estPartAdd: order.estPart,
+									metadata: {
+										workOrder: order.id,
+										partNumber: order.partNumber,
+										operatorCode: order.code,
+										opBatchQty: order.batch,
+										estPartAdd: order.estPart,
+										actualOutput,
+										toolChanges,
+										rejects,
+										actualStartTime,
+										actualEndTime,
+										remarks,
+									},
+								},
+							],
+						},
+					});
+
+					// Update state so subsequent saves update the existing COMPLETED group
+					if (createdGroup) {
+						const newGroupId = String(createdGroup.id ?? "");
+						const newItemId = Array.isArray(createdGroup.Items) && createdGroup.Items[0]
+							? String(createdGroup.Items[0].id ?? "")
+							: "";
+						setEventGroupId(newGroupId);
+						setEventItemId(newItemId);
+						setItemCategory("COMPLETED");
+					}
+				} else {
+					// COMPLETED: Update existing item in the existing group
+					// Use eventGroupId (the actual group ID) instead of order.lhtGroupId (which is the work order ID)
+					const groupIdToUse = eventGroupId || order.lhtGroupId!;
+					await updateDeviceStateEventGroupItems({
+						deviceId: order.lhtDeviceId,
+						clusterId: lhtClusterId,
+						groupId: groupIdToUse,
+						applicationId: lhtApplicationId,
+						account: { id: lhtAccountId },
+						items: [
+							{
+								id: eventItemId,
+								segmentStart,
+								segmentEnd,
+								category: "COMPLETED",
+								operatorCode: order.code,
+								partNumber: order.partNumber,
+								workOrder: order.id,
+								opBatchQty: order.batch,
+								estPartAdd: order.estPart,
+								metadata: {
+									workOrder: order.id,
+									partNumber: order.partNumber,
+									operatorCode: order.code,
+									opBatchQty: order.batch,
+									estPartAdd: order.estPart,
+									actualOutput,
+									toolChanges,
+									rejects,
+									actualStartTime,
+									actualEndTime,
+									remarks,
+								},
+							},
+						],
+					});
+				}
+			} catch (e) {
+				console.error(e);
+				toast.error("Failed to submit completion to Lighthouse");
+				return;
+			}
 		}
+
+		updateOrder(orderId, {
+			status: "COMPLETED",
+			actualOutput,
+			toolChanges,
+			rejects,
+			actualStartTime,
+			actualEndTime,
+			remarks,
+		});
+		toast.success("Order completed successfully");
+		router.push("/stock");
 	};
 
 	return (
 		<div className="flex flex-col min-h-screen bg-background-dashboard font-display">
 			{/* Header */}
-			<header className="sticky top-0 z-50 bg-white border-b border-gray-200 h-[var(--header-height)] px-4 py-2">
+			<header className="sticky top-0 z-50 bg-white border-b border-gray-200 h-(--header-height) px-4 py-2">
 				<div className="flex items-center justify-between h-full">
 					<div className="flex flex-col">
 						<h2 className="header-title">Complete Order</h2>
@@ -239,6 +559,8 @@ function StockEntryForm() {
 									<p className="!text-[9px] font-bold text-primary/60 uppercase leading-none mb-[2px]">Actual Start</p>
 									<input
 										type="time"
+										min={order.shift === "Day Shift (S1)" ? "08:00" : undefined}
+										max={order.shift === "Day Shift (S1)" ? "20:00" : undefined}
 										value={actualStartTime}
 										onChange={(e) => setActualStartTime(e.target.value)}
 										className="w-full bg-transparent border-none p-0 text-xs font-bold text-primary focus:ring-0 leading-none h-auto"
@@ -249,6 +571,8 @@ function StockEntryForm() {
 									<p className="!text-[9px] font-bold text-primary/60 uppercase leading-none mb-[2px]">Actual End</p>
 									<input
 										type="time"
+										min={order.shift === "Day Shift (S1)" ? "08:00" : undefined}
+										max={order.shift === "Day Shift (S1)" ? "20:00" : undefined}
 										value={actualEndTime}
 										onChange={(e) => setActualEndTime(e.target.value)}
 										className="w-full bg-transparent border-none p-0 text-xs font-bold text-primary focus:ring-0 leading-none h-auto"
@@ -298,9 +622,11 @@ function StockEntryForm() {
 								title="Planned Details"
 								icon="assignment"
 								data={formData}
-								onChange={() => {}}
+								onChange={() => { }}
 								readOnly={true}
 								hideHeader={true}
+								devices={devices}
+								selectedDeviceId={order?.lhtDeviceId}
 							/>
 						</div>
 					)}

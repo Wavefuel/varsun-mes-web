@@ -1,24 +1,53 @@
 "use client";
 
-import React, { useState } from "react";
+import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { clsx, type ClassValue } from "clsx";
+import { twMerge } from "tailwind-merge";
+
 import AppHeader from "@/components/AppHeader";
 import SearchFilterBar from "@/components/SearchFilterBar";
 import EmptyState from "@/components/EmptyState";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
 import { useData } from "@/context/DataContext";
-import { toast } from "sonner";
+import type { Order } from "@/lib/types";
+import { fetchDeviceList, readDeviceStateEventGroupsWithItemsByCluster, type DeviceSummary } from "@/utils/scripts";
 
 function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
 }
 
 export default function StockPage() {
-	const { orders, currentDate, setCurrentDate } = useData();
+	const { orders, currentDate } = useData();
 	const [searchQuery, setSearchQuery] = useState("");
-	const [filterStatus, setFilterStatus] = useState("All");
+	const [filterStatus, setFilterStatus] = useState<"All" | "Planned" | "Completed">("All");
 	const [showFilters, setShowFilters] = useState(false);
+
+	const [devices, setDevices] = useState<DeviceSummary[]>([]);
+	const [remoteOrders, setRemoteOrders] = useState<Order[] | null>(null);
+
+	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID;
+	const lhtAccountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID;
+	const lhtApplicationId = process.env.NEXT_PUBLIC_APPLICATION_ID;
+	const lighthouseEnabled = Boolean(lhtClusterId && lhtAccountId && lhtApplicationId);
+
+	const deviceLabel = (device?: DeviceSummary) =>
+		device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
+
+	const formatTimeValue = (value?: string | Date) => {
+		if (!value) return "";
+		const date = value instanceof Date ? value : new Date(value);
+		if (Number.isNaN(date.getTime())) return String(value);
+		return date.toISOString().slice(11, 16);
+	};
+
+	const toLocalYYYYMMDD = (iso: string) => {
+		const d = new Date(iso);
+		if (Number.isNaN(d.getTime())) return "";
+		const yyyy = String(d.getFullYear());
+		const mm = String(d.getMonth() + 1).padStart(2, "0");
+		const dd = String(d.getDate()).padStart(2, "0");
+		return `${yyyy}-${mm}-${dd}`;
+	};
 
 	const formatDateForDisplay = (dateStr: string) => {
 		const date = new Date(dateStr);
@@ -31,16 +60,117 @@ export default function StockPage() {
 			.toUpperCase();
 	};
 
+	useEffect(() => {
+		if (!lighthouseEnabled || !lhtClusterId) return;
+		if (devices.length) return;
+		fetchDeviceList({ clusterId: lhtClusterId })
+			.then((result) => setDevices(result))
+			.catch((error) => console.error(error));
+	}, [devices.length, lighthouseEnabled, lhtClusterId]);
+
+	useEffect(() => {
+		if (!lighthouseEnabled || !lhtClusterId || !lhtAccountId) return;
+
+		const base = new Date(currentDate);
+		const start = new Date(base);
+		start.setHours(0, 0, 0, 0);
+		const end = new Date(base);
+		end.setDate(end.getDate() + 1);
+		end.setHours(23, 59, 59, 999);
+
+		readDeviceStateEventGroupsWithItemsByCluster({
+			clusterId: lhtClusterId,
+			applicationId: lhtApplicationId,
+			account: { id: lhtAccountId },
+			query: { rangeStart: start.toISOString(), rangeEnd: end.toISOString() },
+		})
+			.then((groupsUnknown: unknown) => {
+				type ApiEventItem = {
+					id?: string;
+					category?: string | null;
+					segmentStart?: string | null;
+					segmentEnd?: string | null;
+					metadata?: Record<string, unknown> | null;
+				};
+				type ApiEventGroup = {
+					id?: string;
+					deviceId?: string;
+					rangeStart?: string | null;
+					rangeEnd?: string | null;
+					Items?: ApiEventItem[] | null;
+				};
+
+				const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
+				const mapped: Order[] = groups.flatMap((group) => {
+					const rangeStart = typeof group?.rangeStart === "string" ? group.rangeStart : null;
+					const groupLocalDate = rangeStart ? toLocalYYYYMMDD(rangeStart) : currentDate;
+					if (groupLocalDate !== currentDate) return [];
+
+					const deviceId = typeof group?.deviceId === "string" ? group.deviceId : "";
+					const machineName = (() => {
+						if (!deviceId) return "Unknown Device";
+						const device = devices.find((d) => d.id === deviceId);
+						if (!device) return deviceId;
+						const label = deviceLabel(device);
+						return label && label !== "Unknown Device" ? label : deviceId;
+					})();
+
+					const items = Array.isArray(group?.Items) ? group.Items : [];
+					return items.flatMap((item) => {
+						const metadata = item?.metadata ?? {};
+						const workOrder = String(metadata.workOrder ?? "");
+						if (!workOrder) return [];
+						const batch = Number(metadata.opBatchQty ?? 0);
+						const estPart = String(metadata.estPartAdd ?? "");
+						const startTime = formatTimeValue(item?.segmentStart ?? undefined);
+						const endTime = formatTimeValue(item?.segmentEnd ?? undefined);
+						const category = typeof item?.category === "string" ? String(item.category).toUpperCase() : "";
+						const status: Order["status"] = category === "COMPLETED" ? "COMPLETED" : "PLANNED";
+						const groupId = String(group?.id ?? workOrder);
+
+						return [
+							{
+								id: groupId,
+								workOrder,
+								partNumber: String(metadata.partNumber ?? ""),
+								machine: machineName,
+								operator: String(metadata.operatorCode ?? ""),
+								date: currentDate,
+								shift: "Day Shift (S1)",
+								startTime,
+								endTime,
+								code: String(metadata.operatorCode ?? ""),
+								opNumber: 0,
+								batch,
+								estPart,
+								target: batch,
+								status,
+								lhtDeviceId: deviceId || undefined,
+								lhtGroupId: groupId,
+							},
+						];
+					});
+				});
+				setRemoteOrders(mapped);
+			})
+			.catch((error) => {
+				console.error(error);
+				setRemoteOrders([]);
+			});
+	}, [currentDate, devices, lighthouseEnabled, lhtAccountId, lhtApplicationId, lhtClusterId]);
+
+	const sourceOrders = useMemo(() => (lighthouseEnabled ? remoteOrders ?? [] : orders), [lighthouseEnabled, orders, remoteOrders]);
+
 	// Filter Logic
-	const filteredOrders = orders.filter((order) => {
-		// Filter by Date - only show stock/orders for specific day
+	const filteredOrders = sourceOrders.filter((order) => {
 		if (order.date !== currentDate) return false;
+		const displayWorkOrder = (order as Order & { workOrder?: string }).workOrder || order.id;
 
 		const matchesSearch =
 			order.machine.toLowerCase().includes(searchQuery.toLowerCase()) ||
 			order.operator.toLowerCase().includes(searchQuery.toLowerCase()) ||
 			order.partNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
-			order.id.toLowerCase().includes(searchQuery.toLowerCase());
+			displayWorkOrder.toLowerCase().includes(searchQuery.toLowerCase());
 
 		const matchesStatus = filterStatus === "All" || order.status === filterStatus.toUpperCase();
 
@@ -52,7 +182,7 @@ export default function StockPage() {
 			<AppHeader title="Stock & Inventory" subtitle="Material Management" showDateNavigator={true} />
 
 			{/* Sticky Controls Container */}
-			<div className="sticky top-[var(--header-height-expanded)] z-20 bg-background-dashboard pb-3 px-4">
+			<div className="sticky top-(--header-height-expanded) z-20 bg-background-dashboard pb-3 px-4">
 				{/* Search & Filter Row */}
 				<SearchFilterBar
 					className="mt-3"
@@ -66,73 +196,69 @@ export default function StockPage() {
 				{/* Filter Panel */}
 				{showFilters && (
 					<div className="mt-3 animate-in slide-in-from-top-1 fade-in duration-200">
-						<div>
-							<p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Status</p>
-							<div className="flex gap-2 overflow-x-auto scrollbar-none pb-1">
-								{["All", "Planned", "Completed"].map((status) => (
-									<button
-										key={status}
-										onClick={() => setFilterStatus(status)}
-										className={cn(
-											"planning-filter-btn",
-											filterStatus === status
-												? "bg-primary border-primary text-white"
-												: "bg-white border-card-border text-primary/70 hover:text-primary",
-										)}
-									>
-										{status}
-									</button>
-								))}
-							</div>
+						<div className="flex gap-2 overflow-x-auto scrollbar-none">
+							{(['All', 'Planned', 'Completed'] as const).map(status => (
+								<button
+									key={status}
+									onClick={() => setFilterStatus(status)}
+									className={cn(
+										"px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-colors whitespace-nowrap",
+										filterStatus === status
+											? "bg-primary border-primary text-white"
+											: "bg-white border-gray-200 text-gray-500"
+									)}
+								>
+									{status}
+								</button>
+							))}
 						</div>
 					</div>
 				)}
 			</div>
 
-			<main className="px-4 space-y-2 flex-1 flex flex-col">
-				{filteredOrders.map((order) => (
-					<Link
-						key={order.id}
-						href={`/stock/${encodeURIComponent(order.id)}`}
-						className="planning-card border-card-border active:scale-[0.99] hover:border-card-border"
-					>
-						<div className="flex justify-between items-start gap-4">
-							{/* Left Column */}
-							<div className="flex flex-col gap-0.5 flex-1">
-								{/* Header: Machine + Status */}
-								<div className="flex items-center gap-2">
-									<h3 className="list-title">{order.machine}</h3>
-									<div
-										className={cn(
+			<main className="px-4 space-y-2 ">
+				{filteredOrders.map((order) => {
+					const displayWorkOrder = (order as Order & { workOrder?: string }).workOrder || order.id;
+					const routeId = (order as Order & { workOrder?: string }).workOrder || order.id;
+					return (
+						<Link
+							key={order.id}
+							href={`/stock/${encodeURIComponent(routeId)}`}
+							className="list-card card-shadow active:scale-[0.99] transition-transform"
+						>
+							<div className="flex justify-between items-start gap-4">
+								{/* Left Column */}
+								<div className="flex flex-col gap-0.5 flex-1">
+									{/* Header: Machine + Status */}
+									<div className="flex items-center gap-2">
+										<h3 className="list-title">{order.machine}</h3>
+										<div className={cn(
 											"size-2 rounded-full",
-											order.status === "PLANNED"
-												? "bg-status-planned"
-												: order.status === "COMPLETED"
-													? "bg-status-completed"
-													: "bg-status-default",
-										)}
-									></div>
+											order.status === 'PLANNED' ? "bg-status-planned" :
+												order.status === 'COMPLETED' ? "bg-status-completed" : "bg-status-default"
+										)}></div>
+									</div>
+
+									{/* Part Number • WO */}
+									<p className="list-subtext">
+										{order.partNumber} • {displayWorkOrder}
+									</p>
+
+									{/* Operator */}
+									<p className="list-subtext">{order.operator}</p>
 								</div>
 
-								{/* Part Number • WO */}
-								<p className="list-subtext">
-									{order.partNumber} • {order.id}
-								</p>
-
-								{/* Operator */}
-								<p className="list-subtext">{order.operator}</p>
+								{/* Right Column */}
+								<div className="list-metric-column">
+									{/* Shift Badge */}
+									<span className="list-tag text-primary bg-primary/10">
+										{order.startTime} - {order.endTime}
+									</span>
+								</div>
 							</div>
-
-							{/* Right Column */}
-							<div className="list-metric-column">
-								{/* Shift Badge */}
-								<span className="list-tag text-primary bg-primary/10">
-									{order.startTime} - {order.endTime}
-								</span>
-							</div>
-						</div>
-					</Link>
-				))}
+						</Link>
+					);
+				})}
 
 				{/* Empty State */}
 				{filteredOrders.length === 0 && (
