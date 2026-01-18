@@ -53,7 +53,7 @@ export default function StockPage() {
             <div className="sticky top-[68px] z-20 bg-background-dashboard pb-3 px-4 shadow-[0_4px_20px_-12px_rgba(0,0,0,0.1)]">
 
                 {/* Date Navigator */}
-                <div className="pt-1 pb-0 transition-opacity">
+                <div className="pb-0 transition-opacity">
                     <DateNavigator
                         currentDate={currentDate}
                         setCurrentDate={setCurrentDate}
@@ -97,41 +97,34 @@ export default function StockPage() {
                 {filteredOrders.map((order) => (
                     <Link
                         key={order.id}
-                        // Use encodeURIComponent just in case IDs have special chars
                         href={`/stock/${encodeURIComponent(order.id)}`}
-                        className="block bg-white rounded-xl border border-card-border p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)] transition-all relative overflow-hidden active:scale-[0.99] hover:border-gray-300"
+                        className="list-card card-shadow active:scale-[0.99] transition-transform"
                     >
                         <div className="flex justify-between items-start gap-4">
                             {/* Left Column */}
-                            <div className="flex flex-col gap-1 flex-1">
+                            <div className="flex flex-col gap-0.5 flex-1">
                                 {/* Header: Machine + Status */}
                                 <div className="flex items-center gap-2">
-                                    <h3 className="text-sm font-bold font-display text-primary">{order.machine}</h3>
+                                    <h3 className="list-title">{order.machine}</h3>
                                     <div className={cn(
-                                        "px-2 py-0.5 rounded text-[10px] font-bold uppercase tracking-wider",
-                                        order.status === 'COMPLETED' ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-                                    )}>
-                                        {order.status}
-                                    </div>
+                                        "size-2 rounded-full",
+                                        order.status === 'PLANNED' ? "bg-status-planned" :
+                                            order.status === 'COMPLETED' ? "bg-status-completed" : "bg-status-default"
+                                    )}></div>
                                 </div>
 
-                                {/* Part Number */}
-                                <p className="text-xs font-extrabold text-gray-800">{order.partNumber}</p>
+                                {/* Part Number • WO */}
+                                <p className="list-subtext">{order.partNumber} • {order.id}</p>
 
                                 {/* Operator */}
-                                <p className="text-[11px] font-medium text-gray-400">{order.operator}</p>
+                                <p className="list-subtext">{order.operator}</p>
                             </div>
 
                             {/* Right Column */}
-                            <div className="flex flex-col items-end gap-3 justify-center min-h-[48px]">
-                                {/* Target Badge */}
-                                <span className="text-[10px] font-bold text-gray-500 bg-gray-100/80 px-2 py-1 rounded-md tracking-tight">
-                                    Target: {order.target}
-                                </span>
-
-                                {/* ID Badge */}
-                                <span className="text-[10px] font-bold text-primary/80 bg-[#F0F4F8] px-2 py-1 rounded-md tracking-tight">
-                                    {order.id}
+                            <div className="list-metric-column">
+                                {/* Shift Badge */}
+                                <span className="list-tag text-primary bg-primary/10">
+                                    {order.startTime} - {order.endTime}
                                 </span>
                             </div>
                         </div>

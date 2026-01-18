@@ -11,7 +11,7 @@ export const viewport: Viewport = {
   initialScale: 1,
   maximumScale: 1,
   userScalable: false,
-  themeColor: "#2D5A75",
+  themeColor: "#ffffff",
 };
 
 import BottomNav from "@/components/BottomNav";

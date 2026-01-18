@@ -23,16 +23,16 @@ export default function LoginPage() {
             <div className="w-full max-w-sm flex flex-col items-center">
                 <div className="flex flex-col items-center mb-10 text-center">
                     <div className="size-16 bg-primary rounded-xl flex items-center justify-center mb-4 shadow-lg shadow-primary/20">
-                        <span className="material-symbols-outlined text-white text-4xl leading-none">lightbulb</span>
+                        <span className="material-symbols-outlined text-white !text-4xl leading-none">lightbulb</span>
                     </div>
                     <h1 className="text-3xl font-bold font-display text-primary tracking-tight">Lighthouse</h1>
-                    <p className="text-[10px] font-bold text-gray-400 uppercase tracking-[0.2em] mt-1">Manufacturing Execution</p>
+                    <p className="text-2xs font-bold text-gray-400 uppercase tracking-[0.2em] mt-1">Manufacturing Execution</p>
                 </div>
-                <div className="w-full bg-white border border-card-border rounded-2xl p-8 shadow-[0_1px_3px_0_rgba(0,0,0,0.05),0_1px_2px_0_rgba(0,0,0,0.03)]">
+                <div className="w-full bg-white border border-card-border rounded-2xl p-8 card-shadow">
                     <h2 className="text-lg font-bold font-display text-primary mb-6">Sign In</h2>
                     <form className="space-y-5" onSubmit={handleLogin}>
                         <div>
-                            <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider mb-2" htmlFor="email">Email Address</label>
+                            <label className="block text-xs-plus font-bold text-gray-500 uppercase tracking-wider mb-2" htmlFor="email">Email Address</label>
                             <input
                                 className="w-full px-4 py-3 bg-white border border-card-border rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-gray-400"
                                 id="email"
@@ -44,8 +44,8 @@ export default function LoginPage() {
                         </div>
                         <div>
                             <div className="flex justify-between items-center mb-2">
-                                <label className="block text-[11px] font-bold text-gray-500 uppercase tracking-wider" htmlFor="password">Password</label>
-                                <a className="text-[11px] font-bold text-primary hover:underline" href="#">Forgot Password?</a>
+                                <label className="block text-xs-plus font-bold text-gray-500 uppercase tracking-wider" htmlFor="password">Password</label>
+                                <a className="text-xs-plus font-bold text-primary hover:underline" href="#">Forgot Password?</a>
                             </div>
                             <input
                                 className="w-full px-4 py-3 bg-white border border-card-border rounded-xl text-sm focus:ring-2 focus:ring-primary/20 focus:border-primary outline-none transition-all placeholder:text-gray-400"

@@ -40,6 +40,10 @@ export default function PlanningPage() {
         // Filter by Date
         if (item.date !== currentDate) return false;
 
+        // User requested to only see planning, not completed ones
+        // Casting to string to avoid TypeScript error if type definition is too narrow
+        if ((item.status as string) === 'COMPLETED') return false;
+
         const matchesSearch =
             item.machine.toLowerCase().includes(searchQuery.toLowerCase()) ||
             item.operator.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -48,11 +52,9 @@ export default function PlanningPage() {
         const matchesStatus = filterStatus === 'All' || item.status === filterStatus;
         const matchesMachine = filterMachine === 'All' || item.machine === filterMachine;
 
-        // Hide COMPLETED items during Delete Mode
-        // because users can only delete non-completed plans
-        const matchesDeleteMode = !isDeleteMode || item.status !== 'COMPLETED';
+        // matchesDeleteMode is no longer needed since we globally filter out COMPLETED items
 
-        return matchesSearch && matchesStatus && matchesMachine && matchesDeleteMode;
+        return matchesSearch && matchesStatus && matchesMachine;
     });
 
     // Selection Logic
@@ -87,7 +89,7 @@ export default function PlanningPage() {
             <AppHeader title="Planning" subtitle="Shift Scheduling" />
 
             {/* Sticky Controls Container */}
-            <div className="sticky top-[68px] z-20 bg-background-dashboard pb-3 px-4 shadow-[0_4px_20px_-12px_rgba(0,0,0,0.1)]">
+            <div className="sticky top-[var(--header-height)] z-20 bg-background-dashboard pb-3 px-4 shadow-[0_4px_20px_-12px_rgba(0,0,0,0.1)]">
 
                 {/* Date Navigator */}
                 {/* Date Navigator */}
@@ -114,17 +116,17 @@ export default function PlanningPage() {
                     <div className="mt-3 animate-in slide-in-from-top-1 fade-in duration-200 space-y-3">
                         {/* Status Filter */}
                         <div>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Status</p>
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Status</p>
                             <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1">
-                                {['All', 'PLANNED', 'COMPLETED'].map(status => (
+                                {['All', 'PLANNED'].map(status => (
                                     <button
                                         key={status}
                                         onClick={() => setFilterStatus(status)}
                                         className={cn(
-                                            "px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-colors whitespace-nowrap",
+                                            "planning-filter-btn",
                                             filterStatus === status
                                                 ? "bg-primary border-primary text-white"
-                                                : "bg-white border-gray-200 text-primary/70 hover:text-primary"
+                                                : "bg-white border-card-border text-primary/70 hover:text-primary"
                                         )}
                                     >
                                         {status}
@@ -135,17 +137,17 @@ export default function PlanningPage() {
 
                         {/* Machine Filter */}
                         <div>
-                            <p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Machine</p>
+                            <p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Machine</p>
                             <div className="flex gap-2 overflow-x-auto scrollbar-none pb-1">
                                 {['All', ...Array.from(new Set(orders.map(o => o.machine))).sort()].map(machine => (
                                     <button
                                         key={machine}
                                         onClick={() => setFilterMachine(machine)}
                                         className={cn(
-                                            "px-3 py-1.5 rounded-lg text-[11px] font-bold border transition-colors whitespace-nowrap",
+                                            "planning-filter-btn",
                                             filterMachine === machine
                                                 ? "bg-primary border-primary text-white"
-                                                : "bg-white border-gray-200 text-primary/70 hover:text-primary"
+                                                : "bg-white border-card-border text-primary/70 hover:text-primary"
                                         )}
                                     >
                                         {machine}
@@ -162,11 +164,11 @@ export default function PlanningPage() {
                 {filteredAssignments.map(item => (
                     <Link
                         key={item.id}
-                        href={isDeleteMode ? '#' : `/planning/edit/${encodeURIComponent(item.id)}`}
+                        href={isDeleteMode ? '#' : `/planning/create?id=${encodeURIComponent(item.id)}`}
                         className={cn(
-                            "block bg-white rounded-xl border p-4 shadow-[0_1px_3px_rgba(0,0,0,0.02)] transition-all relative overflow-hidden",
-                            isDeleteMode ? "cursor-default" : "active:scale-[0.99] hover:border-gray-300 border-card-border",
-                            selectedIds.includes(item.id) ? "border-red-500 bg-red-50/30" : "border-card-border"
+                            "planning-card",
+                            isDeleteMode ? "cursor-default" : "active:scale-[0.99] hover:border-card-border border-card-border",
+                            selectedIds.includes(item.id) ? "planning-card-selected" : "border-card-border"
                         )}
                         onClick={(e) => {
                             if (isDeleteMode) {
@@ -178,47 +180,42 @@ export default function PlanningPage() {
                         <div className="flex justify-between items-start gap-4">
 
                             {/* Left Column */}
-                            <div className="flex flex-col gap-1 flex-1">
+                            <div className="flex flex-col gap-0.5 flex-1">
                                 {/* Header: Machine + Status */}
                                 <div className="flex items-center gap-2">
-                                    <h3 className="text-sm font-bold font-display text-primary">{item.machine}</h3>
+                                    <h3 className="list-title">{item.machine}</h3>
                                     <div className={cn(
                                         "size-2 rounded-full",
-                                        item.status === 'PLANNED' ? "bg-amber-400" :
-                                            item.status === 'COMPLETED' ? "bg-emerald-500" : "bg-gray-300"
+                                        item.status === 'PLANNED' ? "bg-status-planned" :
+                                            item.status === 'COMPLETED' ? "bg-status-completed" : "bg-status-default"
                                     )}></div>
                                 </div>
 
-                                {/* Part Number */}
-                                <p className="text-xs font-extrabold text-gray-800">{item.partNumber}</p>
+                                {/* Part Number • WO */}
+                                <p className="list-subtext">{item.partNumber} • {item.id}</p>
 
                                 {/* Operator */}
-                                <p className="text-[11px] font-medium text-gray-400">{item.operator}</p>
+                                <p className="list-subtext">{item.operator}</p>
                             </div>
 
                             {/* Right Column: Info OR Radio Selection */}
-                            <div className="flex flex-col items-end gap-3 justify-center min-h-[48px]">
+                            <div className="list-metric-column">
                                 {isDeleteMode ? (
                                     <div className={cn(
                                         "size-6 rounded-full border-[1.5px] flex items-center justify-center transition-all",
                                         selectedIds.includes(item.id)
-                                            ? "border-red-500 bg-red-50"
-                                            : "border-gray-300 bg-white"
+                                            ? "border-destructive bg-destructive-bg"
+                                            : "border-card-border bg-white"
                                     )}>
                                         {selectedIds.includes(item.id) && (
-                                            <div className="size-3.5 rounded-full bg-red-500 shadow-sm animate-in zoom-in-75 duration-200" />
+                                            <div className="size-3.5 rounded-full bg-destructive shadow-sm animate-in zoom-in-75 duration-200" />
                                         )}
                                     </div>
                                 ) : (
                                     <>
-                                        {/* Time Badge */}
-                                        <span className="text-[10px] font-bold text-gray-500 bg-gray-100/80 px-2 py-1 rounded-md tracking-tight">
+                                        {/* Time Badge (Primary Color) */}
+                                        <span className="list-tag text-primary bg-primary/10">
                                             {item.startTime} - {item.endTime}
-                                        </span>
-
-                                        {/* WO Badge */}
-                                        <span className="text-[10px] font-bold text-primary/80 bg-[#F0F4F8] px-2 py-1 rounded-md tracking-tight">
-                                            {item.id}
                                         </span>
                                     </>
                                 )}
@@ -230,11 +227,11 @@ export default function PlanningPage() {
                 {/* Empty State */}
                 {filteredAssignments.length === 0 && (
                     <div className="flex-1 flex flex-col items-center justify-center -mt-20">
-                        <div className="size-20 rounded-2xl bg-gray-50 border border-dashed border-gray-200 flex items-center justify-center mb-4 rotate-3">
-                            <span className="material-symbols-outlined text-[32px] text-gray-300">event_note</span>
+                        <div className="size-20 rounded-2xl bg-background-dashboard border border-dashed border-card-border flex items-center justify-center mb-4 rotate-3">
+                            <span className="material-symbols-outlined icon-pl-empty text-gray-300">event_note</span>
                         </div>
-                        <h3 className="text-sm font-bold text-gray-900 uppercase tracking-widest mb-1.5">No Plans Found</h3>
-                        <p className="text-xs font-medium text-gray-400 text-center max-w-[200px] leading-relaxed">
+                        <h3 className="text-base font-bold text-gray-900 uppercase tracking-widest mb-1.5">No Plans Found</h3>
+                        <p className="text-sm font-medium text-gray-400 text-center max-w-[200px] leading-relaxed">
                             No assignments scheduled for <br /><span className="text-primary font-bold mt-1 block">{formatDateForDisplay(currentDate)}</span>
                         </p>
                     </div>
@@ -242,15 +239,15 @@ export default function PlanningPage() {
             </main>
 
             {/* Floating Action Buttons */}
-            <div className="fixed bottom-24 right-5 z-40 flex flex-col items-center gap-3">
+            <div className="fixed bottom-[74px] right-5 z-40 flex flex-col items-center gap-3 w-12">
 
                 {/* Confirm Delete FAB */}
                 {isDeleteMode && selectedIds.length > 0 && (
                     <button
                         onClick={handleBatchDeleteClick}
-                        className="size-14 rounded-full bg-red-500 shadow-[0_4px_14px_rgba(239,68,68,0.4)] flex items-center justify-center text-white active:scale-95 transition-all animate-in zoom-in-50 duration-200"
+                        className="planning-fab bg-destructive shadow-[0_4px_14px_rgba(239,68,68,0.4)] animate-in zoom-in-50 duration-200 active:scale-95"
                     >
-                        <span className="material-symbols-outlined text-[32px]">check</span>
+                        <span className="material-symbols-outlined icon-pl-fab">check</span>
                     </button>
                 )}
 
@@ -258,9 +255,9 @@ export default function PlanningPage() {
                 {!isDeleteMode && (
                     <Link
                         href="/planning/create"
-                        className="size-14 rounded-full bg-primary shadow-[0_4px_14px_rgba(0,0,0,0.25)] flex items-center justify-center text-white active:scale-95 transition-all"
+                        className="planning-fab bg-primary shadow-[0_4px_14px_rgba(0,0,0,0.25)] active:scale-95"
                     >
-                        <span className="material-symbols-outlined text-[32px]">add</span>
+                        <span className="material-symbols-outlined icon-pl-fab">add</span>
                     </Link>
                 )}
 
@@ -271,37 +268,38 @@ export default function PlanningPage() {
                         "rounded-full shadow-lg flex items-center justify-center transition-all duration-300 bg-white border border-gray-100",
                         isDeleteMode
                             ? "size-10 text-gray-500 hover:text-gray-800"
-                            : "size-10 text-gray-400 hover:text-red-500"
+                            : "size-10 text-gray-400 hover:text-destructive"
                     )}
                     title={isDeleteMode ? "Cancel" : "Delete Assignments"}
                 >
-                    <span className={cn("material-symbols-outlined", isDeleteMode ? "text-[22px]" : "text-[20px]")}>
+                    <span className={cn("material-symbols-outlined", isDeleteMode ? "icon-pl-action-active" : "icon-pl-action")}>
                         {isDeleteMode ? "close" : "delete"}
                     </span>
                 </button>
             </div>
 
             {/* Custom Delete Confirmation Modal */}
+            {/* Custom Delete Confirmation Modal */}
             {showDeleteConfirm && (
                 <div className="fixed inset-0 z-[60] flex items-center justify-center p-4 bg-black/20 backdrop-blur-[2px] animate-in fade-in duration-200">
                     <div className="bg-white rounded-[24px] shadow-2xl w-full max-w-[320px] p-6 animate-in zoom-in-95 duration-200 border border-white/20">
-                        <div className="size-12 rounded-full bg-red-50 text-red-500 flex items-center justify-center mb-4 mx-auto">
-                            <span className="material-symbols-outlined text-[28px]">delete</span>
+                        <div className="size-12 rounded-full bg-destructive-bg text-destructive flex items-center justify-center mb-4 mx-auto">
+                            <span className="material-symbols-outlined icon-pl-modal">delete</span>
                         </div>
-                        <h3 className="text-lg font-bold text-gray-900 mb-2 text-center font-display">Delete Assignments?</h3>
-                        <p className="text-xs font-medium text-gray-500 mb-6 text-center leading-relaxed">
+                        <h3 className="text-base font-bold text-gray-900 mb-2 text-center font-display">Delete Assignments?</h3>
+                        <p className="text-sm font-medium text-gray-500 mb-6 text-center leading-relaxed">
                             Are you sure you want to delete <strong className="text-gray-800">{selectedIds.length}</strong> selected assignments? <br />This action cannot be undone.
                         </p>
                         <div className="flex gap-3">
                             <button
                                 onClick={() => setShowDeleteConfirm(false)}
-                                className="flex-1 h-11 flex items-center justify-center rounded-xl bg-gray-50 text-gray-600 font-bold text-xs hover:bg-gray-100 transition-colors"
+                                className="flex-1 h-11 flex items-center justify-center rounded-xl bg-background-dashboard text-gray-600 font-bold text-sm hover:bg-gray-100 transition-colors"
                             >
                                 Cancel
                             </button>
                             <button
                                 onClick={confirmDelete}
-                                className="flex-1 h-11 flex items-center justify-center rounded-xl bg-red-500 text-white font-bold text-xs hover:bg-red-600 shadow-[0_4px_12px_rgba(239,68,68,0.3)] transition-all active:scale-95"
+                                className="flex-1 h-11 flex items-center justify-center rounded-xl bg-destructive text-white font-bold text-sm hover:bg-red-600 shadow-md transition-all active:scale-95"
                             >
                                 Delete
                             </button>

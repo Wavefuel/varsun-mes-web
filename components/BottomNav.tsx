@@ -18,29 +18,29 @@ export default function BottomNav() {
         { name: 'Home', href: '/', icon: 'home' },
         { name: 'Planning', href: '/planning', icon: 'calendar_month' },
         { name: 'Stock', href: '/stock', icon: 'inventory_2' },
-        { name: 'Data', href: '/data', icon: 'bar_chart' },
+        { name: 'Events', href: '/data', icon: 'event_note' },
     ];
 
     return (
-        <footer className="fixed bottom-0 left-0 right-0 bg-white border-t border-gray-200 z-50 pb-safe safe-area-bottom">
-            <nav className="flex justify-around items-center px-4 py-2 max-w-[480px] mx-auto">
+        <footer className="footer-root">
+            <nav className="flex justify-around items-center px-4 h-full max-w-[480px] mx-auto">
                 {tabs.map((tab) => {
                     const isActive = pathname === tab.href;
                     return (
                         <Link
                             key={tab.name}
                             href={tab.href}
-                            className="flex flex-col items-center gap-1 p-2 rounded-lg group hover:bg-gray-50 w-full transition-colors"
+                            className="flex flex-col items-center gap-[var(--gap-footer-item)] p-2 rounded-lg footer-link w-full transition-colors hover:bg-gray-50"
                         >
                             <span className={cn(
-                                "material-symbols-outlined text-[20px] transition-colors",
-                                isActive ? "text-[#2D5A75]" : "text-slate-500 group-hover:text-[#2D5A75]"
+                                "material-symbols-outlined transition-colors footer-icon",
+                                isActive ? "footer-active" : "footer-inactive"
                             )}>
                                 {tab.icon}
                             </span>
                             <span className={cn(
-                                "text-[10px] font-medium transition-colors",
-                                isActive ? "text-[#2D5A75]" : "text-slate-500 group-hover:text-[#2D5A75]"
+                                "transition-colors uppercase footer-label",
+                                isActive ? "footer-active" : "footer-inactive"
                             )}>
                                 {tab.name}
                             </span>

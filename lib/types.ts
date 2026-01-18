@@ -21,6 +21,8 @@ export interface Order {
     toolChanges?: number;
     rejects?: number;
     remarks?: string;
+    actualStartTime?: string;
+    actualEndTime?: string;
 }
 
 export const MOCK_INITIAL_ORDERS: Order[] = [

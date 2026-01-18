@@ -4,12 +4,7 @@ import React, { useState, useEffect } from 'react';
 import { useRouter, useParams } from 'next/navigation';
 import { useData } from '@/context/DataContext';
 import { toast } from 'sonner';
-import { clsx, type ClassValue } from 'clsx';
-import { twMerge } from 'tailwind-merge';
-
-function cn(...inputs: ClassValue[]) {
-    return twMerge(clsx(inputs));
-}
+import { cn } from '@/lib/utils';
 
 export default function CompleteOrderPage() {
     const router = useRouter();
@@ -110,7 +105,7 @@ export default function CompleteOrderPage() {
                                 <p className="text-[11px] text-slate-400 font-medium mb-1">Target Output</p>
                                 <p className="text-slate-800 font-bold text-sm leading-tight">{order.target} <span className="text-[10px] font-normal text-slate-400">pcs</span></p>
                             </div>
-                            <div className="bg-white border border-gray-200 rounded-lg p-3 shadow-[0_2px_8px_rgba(0,0,0,0.04)] flex flex-col justify-center items-center text-center h-20">
+                            <div className="bg-white border border-card-border rounded-lg p-3 card-shadow flex flex-col justify-center items-center text-center h-20">
                                 <p className="text-[11px] text-slate-400 font-medium mb-1">Shift Date</p>
                                 <p className="text-slate-800 font-bold text-sm leading-tight">
                                     {new Date(order.date).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
@@ -121,7 +116,7 @@ export default function CompleteOrderPage() {
 
                     <div className="px-4 space-y-5 mt-5">
                         {/* Efficiency Card */}
-                        <div className="bg-white rounded-xl p-5 border border-gray-200 shadow-[0_2px_8px_rgba(0,0,0,0.04)] relative overflow-hidden">
+                        <div className="bg-white rounded-xl p-5 border border-card-border card-shadow relative overflow-hidden">
                             <div className="flex items-center justify-between mb-5">
                                 <div>
                                     <h3 className="text-slate-400 text-xs font-semibold uppercase tracking-wide mb-1">Efficiency</h3>

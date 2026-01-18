@@ -1,28 +1,124 @@
 @import "tailwindcss";
 
-@theme {
+:root {
   --color-primary: #2D5A75;
   --color-background-dashboard: #F8FAFB;
   --color-card-border: #E2E8F0;
 
   --font-display: "Space Grotesk", sans-serif;
   --font-sans: "Noto Sans", sans-serif;
+
+  /* Dimensions */
+  --header-height: 58px;
+  --footer-height: 58px;
+
+  /* Header & Footer Colors */
+  --color-header-bg: #FFFFFF;
+  --color-header-title: #2D5A75;
+  --color-header-subtitle: #6B7280; /* gray-500 */
+  
+  --color-footer-bg: #FFFFFF;
+  --color-footer-border: #E2E8F0;
+  --color-footer-text: #9CA3AF; /* gray-400 */
+  --color-footer-text-active: #2D5A75;
+
+  /* Header Style Tokens */
+  --font-size-header-title: 20px; /* text-xl */
+  --font-weight-header-title: 700; /* font-bold */
+  --font-family-header-title: var(--font-display);
+  --leading-header-title: 1.25; /* leading-tight */
+  --tracking-header-title: -0.025em; /* tracking-tight */
+  
+  --font-size-header-subtitle: 11px; /* text-xs-plus */
+  --font-weight-header-subtitle: 700; /* font-bold */
+  --tracking-header-subtitle: 0.05em; /* tracking-wider */
+  
+  --size-header-icon: var(--icon-md);
+
+  /* Footer Style Tokens */
+  --font-size-footer-label: 10px; /* text-2xs */
+  --font-weight-footer-label: 500; /* font-medium */
+  --tracking-footer-label: -0.025em; /* tracking-tight */
+  
+  --size-footer-icon: var(--icon-sm);
+  --gap-footer-item: 2px;
+  --padding-footer-y: 6px;
+
+  /* Standardized Font Sizes */
+  --font-size-tiny: 9px;
+  --font-size-2xs: 10px;
+  --font-size-xs-plus: 11px;
+  --font-size-metric: 22px;
+
+  /* Status Colors */
+  --color-status-planned: #FBBF24; /* amber-400 */
+  --color-status-completed: #10B981; /* emerald-500 */
+  --color-status-default: #D1D5DB; /* gray-300 */
+
+  /* Destructive/Delete Mode */
+  --color-destructive: #EF4444; /* red-500 */
+  --color-destructive-fg: #FFFFFF;
+  --color-destructive-bg: #FEF2F2; /* red-50 */
+  --color-destructive-bg-hover: #FEE2E2; /* red-100 */
+
+  /* List Item & Tag Tokens */
+  --font-size-list-subtext: var(--font-size-xs-plus);
+  --color-list-subtext: #6B7280; /* gray-500 */
+  --size-list-min-height: 48px;
+  
+  /* Tag Padding */
+  --padding-tag-x: 6px;
+  --padding-tag-y: 2px;
+
+
+  /* Standard Icon Sizes */
+  --icon-sm: 20px;
+  --icon-md: 24px;
+  --icon-lg: 28px;
+  --icon-xl: 32px;
+  
+  --size-fab: 48px;
+
+  /* Deprecating specific PL sizes in favor of standards above */
 }
 
-:root {
-  --background: #F8FAFB;
-  --foreground: #1A202C;
-  --color-primary: #2D5A75;
+@theme {
+  --color-primary: var(--color-primary);
+  --color-background-dashboard: var(--color-background-dashboard);
+  --color-card-border: var(--color-card-border);
+  --color-header-bg: var(--color-header-bg);
+  --color-footer-bg: var(--color-footer-bg);
+  
+  --font-display: var(--font-display);
+  --font-sans: var(--font-sans);
+
+  --text-tiny: var(--font-size-tiny);
+  --text-2xs: var(--font-size-2xs);
+  --text-xs-plus: var(--font-size-xs-plus);
+  --text-metric: var(--font-size-metric);
+
+  /* Status Colors Map */
+  --color-status-planned: var(--color-status-planned);
+  --color-status-completed: var(--color-status-completed);
+  --color-status-default: var(--color-status-default);
+
+  /* Destructive Map */
+  --color-destructive: var(--color-destructive);
+  --color-destructive-fg: var(--color-destructive-fg);
+  --color-destructive-bg: var(--color-destructive-bg);
+  --color-destructive-bg-hover: var(--color-destructive-bg-hover);
 }
 
+/* Base Styles */
 body {
-  background-color: #e5e5e5;
-  color: var(--foreground);
-  font-family: var(--font-noto), "Noto Sans", sans-serif;
+  background-color: var(--color-background-dashboard);
+  color: #1A202C; /* Foreground */
+  font-family: var(--font-sans);
   display: flex;
   justify-content: center;
   min-height: 100vh;
   margin: 0;
+  -webkit-font-smoothing: antialiased;
 }
 
 /* Ensure the app behaves like a mobile app */
@@ -31,10 +127,13 @@ body {
   position: relative;
 }
 
-/* Utilities from reference */
+/* Utilities */
 .no-scrollbar::-webkit-scrollbar { display: none; }
 .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
-.card-shadow { box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03); }
+
+.card-shadow { 
+  box-shadow: 0 1px 3px 0 rgba(0, 0, 0, 0.05), 0 1px 2px 0 rgba(0, 0, 0, 0.03); 
+}
 
 /* Hide spin buttons for number inputs */
 .no-spin-button::-webkit-outer-spin-button,
@@ -66,13 +165,7 @@ body {
   font-variation-settings: 'FILL' 1, 'wght' 400, 'GRAD' 0, 'opsz' 24;
 }
 
-/* Ensure background is light */
-body {
-  background-color: #F8FAFB;
-}
-
 /* Customize Sonner Toast Animation */
-/* Target the list items (toasts) */
 [data-sonner-toast] {
     transition: all 0.6s cubic-bezier(0.23, 1, 0.32, 1) !important;
 }
@@ -81,4 +174,160 @@ body {
 .radial-progress {
   background: radial-gradient(closest-side, #FFFFFF 82%, transparent 83% 100%),
               conic-gradient(var(--color-primary) calc(var(--value) * 1%), #E2E8F0 0);
+}
+
+@layer components {
+  .header-title {
+      font-family: var(--font-family-header-title);
+      font-size: var(--font-size-header-title);
+      font-weight: var(--font-weight-header-title);
+      color: var(--color-header-title);
+      line-height: var(--leading-header-title);
+      letter-spacing: var(--tracking-header-title);
+  }
+
+  .header-subtitle {
+      font-size: var(--font-size-header-subtitle);
+      font-weight: var(--font-weight-header-subtitle);
+      color: var(--color-header-subtitle);
+      letter-spacing: var(--tracking-header-subtitle);
+  }
+
+  .header-icon {
+      font-size: var(--size-header-icon) !important;
+      color: var(--color-header-title);
+  }
+  
+  .footer-root {
+      position: fixed;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      z-index: 50;
+      height: var(--footer-height);
+      background-color: var(--color-footer-bg) !important;
+      border-top: 1px solid var(--color-footer-border);
+      padding-top: var(--padding-footer-y);
+      padding-bottom: var(--padding-footer-y);
+  }
+
+  .footer-label {
+      font-size: var(--font-size-footer-label);
+      font-weight: var(--font-weight-footer-label);
+      letter-spacing: var(--tracking-footer-label);
+  }
+  
+  .footer-icon {
+      font-size: var(--size-footer-icon) !important;
+      color: inherit; /* Allow parent color to take precedence */
+  }
+
+  .footer-active {
+      color: var(--color-footer-text-active);
+  }
+  
+  .footer-inactive {
+      color: var(--color-footer-text);
+      transition: color 0.15s ease;
+  }
+  
+  .footer-link:hover .footer-inactive {
+      color: var(--color-footer-text-active);
+  }
+
+  .planning-filter-btn {
+      padding: 6px 12px; /* px-3 py-1.5 */
+      border-radius: 8px; /* rounded-lg */
+      font-size: 12px; /* Unified Small Size */
+      font-weight: 700;
+      white-space: nowrap;
+      border: 1px solid transparent; /* Placeholder for border */
+      transition: all 0.2s;
+  }
+
+  .planning-card {
+      display: block;
+      background-color: #FFFFFF;
+      border-radius: 12px; /* rounded-xl */
+      border: 1px solid var(--color-card-border);
+      padding: 16px; /* p-4 */
+      position: relative;
+      overflow: hidden;
+      transition: all 0.2s;
+  }
+
+  .planning-card-selected {
+      border-color: var(--color-destructive);
+      background-color: rgba(254, 242, 242, 0.3); /* bg-red-50/30 */
+  }
+
+  .planning-fab {
+      width: 48px !important;
+      height: 48px !important;
+      border-radius: 9999px; /* rounded-full */
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #FFFFFF;
+      transition: all 0.2s;
+  }
+
+  /* Specific Icon Sizes mapped to classes */
+  .icon-pl-empty { font-size: var(--icon-xl) !important; }
+  .icon-pl-fab { font-size: var(--icon-lg) !important; }
+  .icon-pl-action { font-size: var(--icon-sm) !important; }
+  .icon-pl-action-active { font-size: var(--icon-md) !important; } /* Snapping 22px to 24px standard */
+  .icon-pl-modal { font-size: var(--icon-lg) !important; }
+
+  /* Standardized List Component Classes */
+  .list-card {
+      display: block;
+      background-color: #FFFFFF;
+      border-radius: 12px;
+      border: 1px solid var(--color-card-border);
+      padding: 16px;
+      position: relative;
+      overflow: hidden;
+      transition: all 0.2s;
+  }
+  
+  .list-card:active {
+      transform: scale(0.99);
+  }
+
+  .list-card:hover {
+      border-color: #D1D5DB; /* gray-300 - hardcoded for now as per specific hover behavior, or define var */
+  }
+
+  .list-title {
+      font-family: var(--font-display);
+      font-size: 14px; /* text-sm */
+      font-weight: 700;
+      color: var(--color-primary);
+  }
+
+  .list-subtext {
+      font-size: var(--font-size-list-subtext);
+      font-weight: 500;
+      color: var(--color-list-subtext);
+  }
+  
+  /* Container for the right-column metrics to force min-height consistency */
+  .list-metric-column {
+      display: flex;
+      flex-direction: column;
+      align-items: flex-end;
+      gap: 12px; /* gap-3 */
+      justify-content: flex-start;
+      min-height: var(--size-list-min-height);
+  }
+
+  .list-tag {
+      font-size: var(--font-size-2xs);
+      font-weight: 700;
+      padding: var(--padding-tag-y) var(--padding-tag-x);
+      border-radius: 6px; /* rounded-md */
+      letter-spacing: -0.025em; /* tracking-tight */
+      transition: background-color 0.2s, color 0.2s;
+  }
 }

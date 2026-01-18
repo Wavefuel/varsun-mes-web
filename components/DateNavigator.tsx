@@ -49,10 +49,10 @@ export default function DateNavigator({ currentDate, setCurrentDate, disabled, c
                 customInput={
                     <button
                         disabled={disabled}
-                        className="flex items-center gap-2 text-primary hover:bg-primary/5 rounded-lg py-1 px-2 transition-colors -ml-2"
+                        className="flex items-center gap-1.5 bg-white border border-card-border card-shadow rounded-lg py-1.5 px-3 transition-all active:scale-95 text-primary hover:border-primary/30"
                     >
-                        <span className="material-symbols-outlined text-[20px]">calendar_today</span>
-                        <span className="text-sm font-bold font-display uppercase tracking-wider">
+                        <span className="material-symbols-outlined !text-sm text-primary">calendar_today</span>
+                        <span className="text-xs font-bold text-primary uppercase tracking-wider">
                             {getDisplayDate(currentDate)}
                         </span>
                     </button>
@@ -60,20 +60,20 @@ export default function DateNavigator({ currentDate, setCurrentDate, disabled, c
             />
 
             {/* Right: Navigation Arrows */}
-            <div className="flex items-center gap-2">
+            <div className="flex items-center gap-1.5">
                 <button
                     onClick={handlePrevDate}
                     disabled={disabled}
-                    className="size-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 shadow-sm text-primary hover:text-primary hover:border-primary/50 hover:shadow-md active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
+                    className="size-7 flex items-center justify-center rounded-lg bg-white border border-card-border shadow-sm text-primary hover:text-primary hover:border-primary/50 hover:shadow-md active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
                 >
-                    <span className="material-symbols-outlined text-[20px]">chevron_left</span>
+                    <span className="material-symbols-outlined !text-lg">chevron_left</span>
                 </button>
                 <button
                     onClick={handleNextDate}
                     disabled={disabled}
-                    className="size-8 flex items-center justify-center rounded-lg bg-white border border-gray-200 shadow-sm text-primary hover:text-primary hover:border-primary/50 hover:shadow-md active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
+                    className="size-7 flex items-center justify-center rounded-lg bg-white border border-card-border shadow-sm text-primary hover:text-primary hover:border-primary/50 hover:shadow-md active:scale-95 transition-all disabled:opacity-50 disabled:active:scale-100"
                 >
-                    <span className="material-symbols-outlined text-[20px]">chevron_right</span>
+                    <span className="material-symbols-outlined !text-lg">chevron_right</span>
                 </button>
             </div>
         </div>
