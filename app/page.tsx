@@ -3,8 +3,6 @@
 import React from 'react';
 import Link from 'next/link';
 import AppHeader from '@/components/AppHeader';
-import CustomDatePicker from '@/components/CustomDatePicker';
-import DateNavigator from '@/components/DateNavigator';
 import { useData } from '@/context/DataContext';
 
 import { Card } from '@/components/ui/Card';
@@ -40,15 +38,10 @@ export default function Home() {
       <AppHeader
         title="Production Overview"
         subtitle="Live Plant Metrics"
+        showDateNavigator={true}
       />
 
-      {/* Persistent Date Navigator for Home Page */}
-      <div className="sticky top-[var(--header-height)] z-20 bg-background-dashboard px-4 pb-2 pt-1">
-        <DateNavigator
-          currentDate={currentDate}
-          setCurrentDate={setCurrentDate}
-        />
-      </div>
+
 
       <main className="px-4 pb-4 space-y-6 pt-[16px]">
 
