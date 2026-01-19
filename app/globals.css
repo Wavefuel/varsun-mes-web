@@ -111,7 +111,7 @@
 
 /* Base Styles */
 body {
-	background-color: var(--color-background-dashboard);
+	background-color: #d4d4d8; /* Neutral gray to frame the mobile view */
 	color: #1a202c; /* Foreground */
 	font-family: var(--font-sans);
 	display: flex;
@@ -213,8 +213,10 @@ main {
 	.footer-root {
 		position: fixed;
 		bottom: 0;
-		left: 0;
-		right: 0;
+		left: 50%;
+		transform: translateX(-50%);
+		width: 100%;
+		max-width: 480px;
 		z-index: 50;
 		height: var(--footer-height);
 		background-color: var(--color-footer-bg) !important;

@@ -61,8 +61,7 @@ export default function PlanningPage() {
 
 	const lighthouseEnabled = Boolean(lhtClusterId && lhtAccountId && lhtApplicationId);
 
-	const deviceLabel = (device?: DeviceSummary) =>
-		device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
+	const deviceLabel = (device?: DeviceSummary) => device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
 
 	const formatTimeValue = (value?: string | Date) => {
 		if (!value) return "";
@@ -298,7 +297,9 @@ export default function PlanningPage() {
 										onClick={() => setFilterStatus(status as "All" | "PLANNED")}
 										className={cn(
 											"planning-filter-btn",
-											filterStatus === status ? "bg-primary border-primary text-white" : "bg-white border-card-border text-primary/70 hover:text-primary",
+											filterStatus === status
+												? "bg-primary border-primary text-white"
+												: "bg-white border-card-border text-primary/70 hover:text-primary",
 										)}
 									>
 										{status}
@@ -316,7 +317,9 @@ export default function PlanningPage() {
 										onClick={() => setFilterMachine(machine)}
 										className={cn(
 											"planning-filter-btn",
-											filterMachine === machine ? "bg-primary border-primary text-white" : "bg-white border-card-border text-primary/70 hover:text-primary",
+											filterMachine === machine
+												? "bg-primary border-primary text-white"
+												: "bg-white border-card-border text-primary/70 hover:text-primary",
 										)}
 									>
 										{machine}
@@ -358,7 +361,11 @@ export default function PlanningPage() {
 										<div
 											className={cn(
 												"size-2 rounded-full",
-												item.status === "PLANNED" ? "bg-status-planned" : item.status === "COMPLETED" ? "bg-status-completed" : "bg-status-default",
+												item.status === "PLANNED"
+													? "bg-status-planned"
+													: item.status === "COMPLETED"
+														? "bg-status-completed"
+														: "bg-status-default",
 											)}
 										></div>
 									</div>
@@ -377,7 +384,9 @@ export default function PlanningPage() {
 												selectedIds.includes(key) ? "border-destructive bg-destructive-bg" : "border-card-border bg-white",
 											)}
 										>
-											{selectedIds.includes(key) && <div className="size-3.5 rounded-full bg-destructive shadow-sm animate-in zoom-in-75 duration-200" />}
+											{selectedIds.includes(key) && (
+												<div className="size-3.5 rounded-full bg-destructive shadow-sm animate-in zoom-in-75 duration-200" />
+											)}
 										</div>
 									) : (
 										<span className="list-tag text-primary bg-primary/10">
@@ -406,15 +415,23 @@ export default function PlanningPage() {
 				)}
 			</main>
 
-			<div className="fixed bottom-[74px] right-5 z-40 flex flex-col items-center gap-3 w-12">
+			{/* Floating Action Buttons */}
+			<div className="fixed bottom-[74px] left-1/2 -translate-x-1/2 z-40 w-full max-w-[480px] pointer-events-none flex flex-col items-end gap-3 pr-4">
+				{/* Confirm Delete FAB */}
 				{isDeleteMode && selectedIds.length > 0 && (
-					<button onClick={handleBatchDeleteClick} className="planning-fab bg-destructive shadow-[0_4px_14px_rgba(239,68,68,0.4)] animate-in zoom-in-50 duration-200 active:scale-95">
+					<button
+						onClick={handleBatchDeleteClick}
+						className="planning-fab pointer-events-auto bg-destructive shadow-[0_4px_14px_rgba(239,68,68,0.4)] animate-in zoom-in-50 duration-200 active:scale-95"
+					>
 						<span className="material-symbols-outlined icon-pl-fab">check</span>
 					</button>
 				)}
 
 				{!isDeleteMode && (
-					<Link href="/planning/create" className="planning-fab bg-primary shadow-[0_4px_14px_rgba(0,0,0,0.25)] active:scale-95">
+					<Link
+						href="/planning/create"
+						className="planning-fab pointer-events-auto bg-primary shadow-[0_4px_14px_rgba(0,0,0,0.25)] active:scale-95"
+					>
 						<span className="material-symbols-outlined icon-pl-fab">add</span>
 					</Link>
 				)}
@@ -422,12 +439,14 @@ export default function PlanningPage() {
 				<button
 					onClick={toggleDeleteMode}
 					className={cn(
-						"rounded-full shadow-lg flex items-center justify-center transition-all duration-300 bg-white border border-gray-100",
+						"rounded-full pointer-events-auto shadow-lg flex items-center justify-center transition-all duration-300 bg-white border border-gray-100",
 						isDeleteMode ? "size-10 text-gray-500 hover:text-gray-800" : "size-10 text-gray-400 hover:text-destructive",
 					)}
 					title={isDeleteMode ? "Cancel" : "Delete Assignments"}
 				>
-					<span className={cn("material-symbols-outlined", isDeleteMode ? "icon-pl-action-active" : "icon-pl-action")}>{isDeleteMode ? "close" : "delete"}</span>
+					<span className={cn("material-symbols-outlined", isDeleteMode ? "icon-pl-action-active" : "icon-pl-action")}>
+						{isDeleteMode ? "close" : "delete"}
+					</span>
 				</button>
 			</div>
 
@@ -439,7 +458,8 @@ export default function PlanningPage() {
 						</div>
 						<h3 className="text-base font-bold text-gray-900 mb-2 text-center font-display">Delete Assignments?</h3>
 						<p className="text-sm font-medium text-gray-500 mb-6 text-center leading-relaxed">
-							Are you sure you want to delete <strong className="text-gray-800">{selectedIds.length}</strong> selected assignments? <br />
+							Are you sure you want to delete <strong className="text-gray-800">{selectedIds.length}</strong> selected assignments?{" "}
+							<br />
 							This action cannot be undone.
 						</p>
 						<div className="flex gap-3">
