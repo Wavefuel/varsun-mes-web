@@ -351,10 +351,32 @@ function AssignmentForm() {
 			return;
 		}
 
-		const itemSegment = buildSegmentRangeIso(date, startTime, endTime);
+		let itemSegment = buildSegmentRangeIso(date, startTime, endTime);
 		if (!itemSegment) {
 			toast.error("Invalid start/end time");
 			return;
+		}
+
+		// Night shift: treat early-morning times (e.g. 02:00) as part of the same
+		// overnight window (20:00–08:00) by placing them on the next calendar day.
+		if (isNightShift(shift)) {
+			const shiftWindow = getShiftWindow(shift); // typically 20:00–08:00
+			const startMin = timeToMinutes(startTime);
+			const endMin = timeToMinutes(endTime);
+			const windowEndMin = timeToMinutes(shiftWindow.end); // e.g. 08:00
+
+			const isEarlyStart = startMin < windowEndMin;
+			const isEarlyEnd = endMin <= windowEndMin;
+
+			if (isEarlyStart && isEarlyEnd) {
+				const startIso = buildDateTimeIso(date, startTime, 1);
+				const endIso = buildDateTimeIso(date, endTime, 1);
+				if (!startIso || !endIso) {
+					toast.error("Invalid start/end time");
+					return;
+				}
+				itemSegment = { start: startIso, end: endIso };
+			}
 		}
 
 		const groupStartMs = new Date(groupRange.start).getTime();
