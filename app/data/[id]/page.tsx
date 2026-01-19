@@ -13,6 +13,7 @@ import SearchFilterBar from "@/components/SearchFilterBar";
 import Loader from "@/components/Loader";
 
 import { fetchDeviceList, type DeviceSummary } from "@/utils/scripts";
+import { formatTimeToIST } from "@/utils/dateUtils";
 import {
 	createDeviceStateEventGroup,
 	createDeviceStateEventGroupItems,
@@ -261,14 +262,7 @@ export default function MachineTaggingPage() {
 
 				// Helper function to convert UTC to IST (UTC+5:30)
 				const convertUTCToIST = (utcDate: string): string => {
-					const date = new Date(utcDate);
-					// Use toLocaleString with Asia/Kolkata timezone to get IST time
-					return date.toLocaleString("en-US", {
-						timeZone: "Asia/Kolkata",
-						hour: "2-digit",
-						minute: "2-digit",
-						hour12: false,
-					});
+					return formatTimeToIST(utcDate);
 				};
 
 				const mappedEvents = result.data.map((period: DeviceStatusPeriod, index: number) => {

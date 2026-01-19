@@ -20,6 +20,7 @@ import {
 	readDeviceStateEventGroupsWithItemsByCluster,
 	type DeviceSummary,
 } from "@/utils/scripts";
+import { formatTimeToIST } from "@/utils/dateUtils";
 
 function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
@@ -82,7 +83,7 @@ export default function PlanningPage() {
 		if (!value) return "";
 		const date = value instanceof Date ? value : new Date(value);
 		if (Number.isNaN(date.getTime())) return String(value);
-		return date.toISOString().slice(11, 16);
+		return formatTimeToIST(date);
 	};
 
 	const toLocalYYYYMMDD = (iso: string) => {
@@ -311,13 +312,16 @@ export default function PlanningPage() {
 				const selected = filteredAssignments.filter((a) => selectedIds.includes(selectionKey(a)));
 				const deletions = selected.filter((a) => a.lhtDeviceId && a.lhtGroupId && a.lhtItemId);
 				// Group by deviceId for efficient batch deletion
-				const deletionsByDevice = deletions.reduce((acc, curr) => {
-					if (!acc[curr.lhtDeviceId!]) {
-						acc[curr.lhtDeviceId!] = [];
-					}
-					acc[curr.lhtDeviceId!].push(curr.lhtItemId!);
-					return acc;
-				}, {} as Record<string, string[]>);
+				const deletionsByDevice = deletions.reduce(
+					(acc, curr) => {
+						if (!acc[curr.lhtDeviceId!]) {
+							acc[curr.lhtDeviceId!] = [];
+						}
+						acc[curr.lhtDeviceId!].push(curr.lhtItemId!);
+						return acc;
+					},
+					{} as Record<string, string[]>,
+				);
 
 				for (const [deviceId, itemIds] of Object.entries(deletionsByDevice)) {
 					await deleteDeviceStateEventGroupItemsMany({
@@ -436,9 +440,9 @@ export default function PlanningPage() {
 						/>
 					</div>
 				) : isLoading ||
-					(lighthouseEnabled && globalAssignments === null) ||
-					globalDataDate !== `${currentDate}:${currentShift}` ||
-					(lighthouseEnabled && !globalDevices.length) ? (
+				  (lighthouseEnabled && globalAssignments === null) ||
+				  globalDataDate !== `${currentDate}:${currentShift}` ||
+				  (lighthouseEnabled && !globalDevices.length) ? (
 					<div className="flex-1 flex flex-col justify-center">
 						<Loader />
 					</div>
