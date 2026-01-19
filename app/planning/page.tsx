@@ -408,7 +408,7 @@ export default function PlanningPage() {
 							const key = selectionKey(item);
 							const displayWorkOrder = item.workOrder || item.id;
 							// Use workOrder for routing if available, otherwise fallback to group ID
-							const routeId = item.workOrder || item.id;
+							const routeId = item.id;
 							const href = `/planning/create?id=${encodeURIComponent(routeId)}&deviceId=${encodeURIComponent(item.lhtDeviceId ?? "ALL")}&date=${encodeURIComponent(currentDate)}`;
 							return (
 								<Link

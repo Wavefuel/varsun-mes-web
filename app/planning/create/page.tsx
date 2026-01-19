@@ -189,7 +189,39 @@ function AssignmentForm() {
 				}
 
 				// --- EDIT MODE ---
-				// Try fetching local first
+				// 1. Try finding in loaded assignments context first (Live Data)
+				const cached = planningAssignments?.find((p) => p.id === orderId || p.lhtGroupId === orderId);
+				if (cached) {
+					setMachine(cached.machine);
+					setOperator(cached.operator);
+					setDate(cached.date);
+					setShift(cached.shift);
+					setStartTime(cached.startTime);
+					setEndTime(cached.endTime);
+					setCode(cached.code);
+					setPartNumber(cached.partNumber);
+					setWorkOrderId(cached.workOrder || "");
+					setOpNumber(cached.opNumber);
+					setBatch(cached.batch);
+
+					const parsedEst = cached.estPart || "1.5m";
+					if (parsedEst.endsWith("h")) {
+						setEstUnit("hr");
+						setEstTime(parsedEst.replace(/h$/, ""));
+					} else {
+						setEstUnit("min");
+						setEstTime(parsedEst.replace(/m$/, ""));
+					}
+
+					if (cached.lhtDeviceId) setSelectedDeviceId(cached.lhtDeviceId);
+					if (cached.lhtGroupId) setEventGroupId(cached.lhtGroupId);
+					if (cached.lhtItemId) setEventItemId(cached.lhtItemId);
+
+					setIsLoading(false);
+					return;
+				}
+
+				// 2. Try fetching local legacy storage (Offline/Local)
 				const existing = getOrderById(orderId);
 				if (existing) {
 					setMachine(existing.machine);

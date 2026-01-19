@@ -282,7 +282,7 @@ export default function StockPage() {
 					<>
 						{filteredOrders.map((order) => {
 							const displayWorkOrder = (order as Order & { workOrder?: string }).workOrder || order.id;
-							const routeId = (order as Order & { workOrder?: string }).workOrder || order.id;
+							const routeId = order.id;
 							return (
 								<Link
 									key={order.id}

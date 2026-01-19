@@ -47,20 +47,26 @@ function StockEntryForm() {
 	const queryDeviceId = searchParams?.get("deviceId") ?? "";
 	const queryDate = searchParams?.get("date") ?? "";
 
-	const { addOrder, getOrderById, updateOrder, stockDevices, setStockDevices } = useData();
+	const { addOrder, getOrderById, updateOrder, stockDevices, setStockDevices, stockOrders } = useData();
 
 	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID ?? "";
 	const lhtAccountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID ?? "";
 	const lhtApplicationId = process.env.NEXT_PUBLIC_APPLICATION_ID ?? "";
 	const lighthouseEnabled = Boolean(lhtClusterId && lhtAccountId && lhtApplicationId);
 
-	const orderFromContext = orderId ? getOrderById(orderId) : undefined;
+	// 1. Try finding in loaded stockOrders context first (Live Data)
+	const cachedOrder = stockOrders?.find((o) => o.id === orderId || o.lhtGroupId === orderId);
+	// 2. Fallback to local storage logic
+	const localOrder = getOrderById(orderId);
+
+	const orderFromContext = cachedOrder || localOrder;
+
 	const [resolvedOrder, setResolvedOrder] = useState<Order | null>(null);
 	const [devices, setDevices] = useState<DeviceSummary[]>(stockDevices);
 	const [isLoading, setIsLoading] = useState(true);
 	const [isError, setIsError] = useState(false);
 
-	// Initialize itemCategory from context if available, since API fetch may be skipped when orderFromContext exists
+	// Initialize itemCategory from context if available
 	const [itemCategory, setItemCategory] = useState<string>(() => {
 		if (orderFromContext?.status) {
 			return orderFromContext.status.toUpperCase();
@@ -116,7 +122,7 @@ function StockEntryForm() {
 			endTime: o.endTime,
 			code: o.code,
 			partNumber: o.partNumber,
-			workOrderId: o.id,
+			workOrderId: (o as any).workOrder || o.id, // Fallback safely
 			opNumber: o.opNumber,
 			batch: o.batch,
 			estTime,
@@ -162,7 +168,7 @@ function StockEntryForm() {
 		let cancelled = false;
 
 		const loadData = async () => {
-			setIsLoading(true);
+			if (!cachedOrder) setIsLoading(true);
 
 			try {
 				// 1. Fetch Devices (if not cached)
@@ -174,11 +180,72 @@ function StockEntryForm() {
 					setStockDevices(deviceList);
 				}
 
-				// 2. Sync / Load Order Data
-				// If we have orderFromContext, we might already be good,
-				// BUT we might still need to fetch remote IDs (lhtGroupId/lhtItemId) if they are missing locally.
+				// 2. Optimization: If we found it in stockOrders context, use it directly
+				// (This assumes stockOrders has fresh enough data)
+				if (cachedOrder) {
+					console.log("Using cached order from stockOrders:", cachedOrder.id);
+					setResolvedOrder(cachedOrder);
+					// Ensure local syncing for future
+					addOrder(cachedOrder);
 
-				// Sync logic from context if available
+					// Populate form state from cached
+					const built = cachedOrder;
+					setActualOutput(built.actualOutput || 0);
+					setToolChanges(built.toolChanges || 0);
+					setRejects(built.rejects || 0);
+					setRemarks(built.remarks || "");
+					setActualStartTime(built.actualStartTime || built.startTime || "");
+					setActualEndTime(built.actualEndTime || built.endTime || "");
+
+					const { estTime: parsedEstTime, estUnit: parsedEstUnit } = parseEst(built.estPart || "0m");
+					setFormData({
+						machine: built.machine,
+						operator: built.operator,
+						date: built.date,
+						shift: built.shift,
+						startTime: built.startTime,
+						endTime: built.endTime,
+						code: built.code,
+						partNumber: built.partNumber,
+						workOrderId: (built as any).workOrder || built.id,
+						opNumber: built.opNumber,
+						batch: built.batch,
+						estTime: parsedEstTime,
+						estUnit: parsedEstUnit,
+					});
+
+					// IDs
+					if (built.lhtGroupId) setEventGroupId(built.lhtGroupId);
+					// For item ID, stockOrders might map lhtItemId or we assume group ID logic
+					// StockPage mapping doesn't explicitly have lhtItemId, it maps items to rows
+					// Actually StockPage maps: lhtGroupId: String(group?.id ?? workOrder)
+					// But doesn't map 'lhtItemId'.
+					// We might need to fetch anyway if lhtItemId or precise details are missing?
+					// StockPage:
+					// const mapped: Order[] = groups.flatMap(...)
+					// It does NOT map lhtItemId.
+					// SO WE MIGHT NEED TO FETCH ANYWAY if we need the ITEM ID for updates.
+					// However, if we just need to VIEW, it's fine.
+					// But this page is for COMPLETION (Update).
+					// To update a Lighthouse item, we need its ID.
+
+					// Checking if we can skip...
+					// The update logic uses: eventItemId
+					// stockOrders does not seem to put eventItemId into the Order type currently?
+					// Let's check types.ts
+				}
+
+				// If we don't have the fully resolved IDs (specifically ITEM ID for Updates), we must fetch.
+				// cachedOrder is type Order. Order interface doesn't have lhtItemId (it has lhtGroupId).
+				// Assignment interface HAS lhtItemId.
+				// StockPage maps to Order.
+
+				// SO: We probably DO need to fetch to get the specific Item ID within the group if it's not in the Order type.
+				// UNLESS we update Order type to include lhtItemId.
+
+				// Let's stick to fetching for now to be safe, BUT prioritize ID lookup logic below.
+
+				// 3. Sync logic from context if available
 				if (orderFromContext) {
 					const statusFromContext = orderFromContext.status?.toUpperCase();
 					if (statusFromContext && statusFromContext !== itemCategory) {
@@ -186,11 +253,6 @@ function StockEntryForm() {
 					}
 					if (orderFromContext.lhtGroupId && orderFromContext.lhtGroupId !== eventGroupId) {
 						setEventGroupId(orderFromContext.lhtGroupId);
-					}
-					// If we have eventItemId already, we might simply stop here
-					if (eventItemId) {
-						setIsLoading(false);
-						return;
 					}
 				}
 
@@ -265,7 +327,9 @@ function StockEntryForm() {
 					remarks: String(metadata.remarks ?? ""),
 					actualStartTime: String(metadata.actualStartTime ?? ""),
 					actualEndTime: String(metadata.actualEndTime ?? ""),
-				};
+					// Add workOrder to the built object (cast to any or extend type locally if needed by consumers)
+					workOrder: String(metadata.workOrder ?? ""),
+				} as Order & { workOrder?: string };
 
 				if (cancelled) return;
 				setResolvedOrder(built);
@@ -336,7 +400,8 @@ function StockEntryForm() {
 
 	// Fallback to minimal data if order is missing but we have error (shouldn't happen due to loading check, but safe)
 	const displayPN = order?.partNumber || "Unknown";
-	const displayID = order?.id || orderId;
+	// Prefer workOrder if available, otherwise fallback to ID (which might be Group ID)
+	const displayID = (order as any).workOrder || order?.id || orderId;
 	const displayDate = order ? new Date(order.date).toLocaleDateString("en-US", { month: "short", day: "numeric" }) : "";
 	const target = order.target || 1;
 	const efficiency = Math.round((actualOutput / target) * 100);
