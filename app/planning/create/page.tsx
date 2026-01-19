@@ -7,8 +7,10 @@ import { toast } from "sonner";
 import AssignmentDetailsCard, { type AssignmentFormData } from "@/components/AssignmentDetailsCard";
 import { CustomToast } from "@/components/CustomToast";
 import { useData } from "@/context/DataContext";
+import type { Assignment } from "@/lib/types";
 import {
 	createDeviceStateEventGroup,
+	createDeviceStateEventGroupItems,
 	fetchDeviceList,
 	readDeviceStateEventGroupsWithItemsByCluster,
 	updateDeviceStateEventGroup,
@@ -17,10 +19,21 @@ import {
 } from "@/utils/scripts";
 
 function AssignmentForm() {
-	const router = useRouter();
+    const router = useRouter();
 	const searchParams = useSearchParams();
 
-	const { addOrder, currentDate, getOrderById, orders, setCurrentDate, updateOrder } = useData();
+	const {
+		addOrder,
+		currentDate,
+		getOrderById,
+		orders,
+		planningAssignments,
+		planningDataDate,
+		setCurrentDate,
+		setPlanningAssignments,
+		setPlanningDataDate,
+		updateOrder,
+	} = useData();
 
 	const orderId = searchParams.get("id");
 	const isEditMode = Boolean(orderId);
@@ -34,21 +47,21 @@ function AssignmentForm() {
 	const [devices, setDevices] = useState<DeviceSummary[]>([]);
 	const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
 
-	// Form inputs state
-	const [machine, setMachine] = useState("CNC-042 (Alpha)");
-	const [operator, setOperator] = useState("Marcus Jensen");
+    // Form inputs state
+    const [machine, setMachine] = useState("CNC-042 (Alpha)");
+    const [operator, setOperator] = useState("Marcus Jensen");
 	const [date, setDate] = useState(() => queryDate || currentDate);
 	const [shift, setShift] = useState("Day Shift (S1)");
 	const [startTime, setStartTime] = useState("08:00");
 	const [endTime, setEndTime] = useState("20:00");
-	const [code, setCode] = useState("SH-D24");
-	const [partNumber, setPartNumber] = useState("");
-	const [workOrderId, setWorkOrderId] = useState("");
-	const [opNumber, setOpNumber] = useState(20);
-	const [batch, setBatch] = useState(450);
-	const [estTime, setEstTime] = useState("1.5");
+    const [code, setCode] = useState("SH-D24");
+    const [partNumber, setPartNumber] = useState("");
+    const [workOrderId, setWorkOrderId] = useState("");
+    const [opNumber, setOpNumber] = useState(20);
+    const [batch, setBatch] = useState(450);
+    const [estTime, setEstTime] = useState("1.5");
 	const [estUnit, setEstUnit] = useState<"min" | "hr">("min");
-	const [errors, setErrors] = useState<Record<string, boolean>>({});
+    const [errors, setErrors] = useState<Record<string, boolean>>({});
 
 	// Needed for edit-mode updates (API item id is not the same as group id).
 	const [eventItemId, setEventItemId] = useState<string>("");
@@ -129,6 +142,29 @@ function AssignmentForm() {
 		const d = new Date(value);
 		if (Number.isNaN(d.getTime())) return "";
 		return d.toISOString().slice(11, 16);
+	};
+
+	const extractCreatedItemId = (payload: unknown, expectedSegmentStart: string | null) => {
+		if (!payload || typeof payload !== "object") return undefined;
+		const group = payload as Record<string, unknown>;
+		const items = Array.isArray(group.Items) ? (group.Items as Record<string, unknown>[]) : [];
+		const match = items.find((item) => {
+			const metadata = item?.metadata && typeof item.metadata === "object" ? (item.metadata as Record<string, unknown>) : {};
+			const workOrder = String(metadata.workOrder ?? "");
+			if (!workOrder || workOrder !== workOrderId) return false;
+			const segmentStart = item?.segmentStart ? String(item.segmentStart) : "";
+			return !expectedSegmentStart || !segmentStart || segmentStart === expectedSegmentStart;
+		});
+		return typeof match?.id === "string" ? match.id : undefined;
+	};
+
+	const findLocalGroupId = () => {
+		if (!planningAssignments || planningDataDate !== date) return undefined;
+		const match = planningAssignments.find(
+			(item) => item.lhtDeviceId === selectedDeviceId && item.shift === shift && item.date === date && item.lhtGroupId,
+		);
+		if (!match?.lhtGroupId) return undefined;
+		return match.lhtGroupId;
 	};
 
 	useEffect(() => {
@@ -284,16 +320,16 @@ function AssignmentForm() {
 		router,
 	]);
 
-	const handleSave = async () => {
-		const newErrors: Record<string, boolean> = {};
-		if (!partNumber) newErrors.partNumber = true;
-		if (!workOrderId) newErrors.workOrderId = true;
+    const handleSave = async () => {
+        const newErrors: Record<string, boolean> = {};
+        if (!partNumber) newErrors.partNumber = true;
+        if (!workOrderId) newErrors.workOrderId = true;
 
-		if (Object.keys(newErrors).length > 0) {
-			setErrors(newErrors);
-			toast.error("Please complete all required fields");
-			return;
-		}
+        if (Object.keys(newErrors).length > 0) {
+            setErrors(newErrors);
+            toast.error("Please complete all required fields");
+            return;
+        }
 
 		const groupWindow = getShiftWindow(shift);
 		const groupRange = buildSegmentRangeIso(date, groupWindow.start, groupWindow.end);
@@ -359,6 +395,7 @@ function AssignmentForm() {
 
 		let lhtGroupId: string | undefined;
 		let lhtDeviceId: string | undefined;
+		let lhtItemId: string | undefined;
 
 		// Lighthouse write (optional; app can still work in local-only mode).
 		if (lhtClusterId && lhtAccountId && lhtApplicationId) {
@@ -403,16 +440,43 @@ function AssignmentForm() {
 					lhtGroupId = orderId;
 					lhtDeviceId = selectedDeviceId;
 				} else {
-					const created = await createDeviceStateEventGroup({
-						deviceId: selectedDeviceId,
-						clusterId: lhtClusterId,
-						applicationId: lhtApplicationId,
-						account: { id: lhtAccountId },
-						body: {
-							// Shift-wise group range (not full day)
-							rangeStart: groupRange.start,
-							rangeEnd: groupRange.end,
-							title: `PLANNED-${date}`,
+					let existingGroupId = findLocalGroupId();
+
+					if (!existingGroupId) {
+						const groupsUnknown = await readDeviceStateEventGroupsWithItemsByCluster({
+							clusterId: lhtClusterId,
+							applicationId: lhtApplicationId,
+							account: { id: lhtAccountId },
+							query: { rangeStart: groupRange.start, rangeEnd: groupRange.end },
+							deviceId: selectedDeviceId,
+						});
+
+						type ApiEventGroup = {
+							id?: string;
+							deviceId?: string;
+							rangeStart?: string | null;
+							rangeEnd?: string | null;
+						};
+
+						const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
+						const matching = groups.find((group) => {
+							if (group?.deviceId !== selectedDeviceId) return false;
+							if (!group?.rangeStart || !group?.rangeEnd) return false;
+							const rangeStartMs = new Date(group.rangeStart).getTime();
+							const rangeEndMs = new Date(group.rangeEnd).getTime();
+							return rangeStartMs === groupStartMs && rangeEndMs === groupEndMs;
+						});
+
+						existingGroupId = typeof matching?.id === "string" ? matching.id : undefined;
+					}
+
+					if (existingGroupId) {
+						const updatedGroup = await createDeviceStateEventGroupItems({
+							deviceId: selectedDeviceId,
+							clusterId: lhtClusterId,
+							applicationId: lhtApplicationId,
+							groupId: existingGroupId,
+							account: { id: lhtAccountId },
 							items: [
 								{
 									segmentStart: itemSegment.start,
@@ -425,21 +489,50 @@ function AssignmentForm() {
 									estPartAdd: estPart,
 								},
 							],
-						},
-					});
-
-					if (created && typeof created === "object") {
-						const maybeCreated = created as Record<string, unknown>;
-						lhtGroupId = typeof maybeCreated.id === "string" ? maybeCreated.id : undefined;
-						lhtDeviceId = typeof maybeCreated.deviceId === "string" ? maybeCreated.deviceId : selectedDeviceId;
-					} else {
+						});
+						lhtItemId = extractCreatedItemId(updatedGroup, itemSegment.start);
+						lhtGroupId = existingGroupId;
 						lhtDeviceId = selectedDeviceId;
+					} else {
+						const created = await createDeviceStateEventGroup({
+							deviceId: selectedDeviceId,
+                clusterId: lhtClusterId,
+							applicationId: lhtApplicationId,
+                account: { id: lhtAccountId },
+                body: {
+								// Shift-wise group range (not full day)
+								rangeStart: groupRange.start,
+								rangeEnd: groupRange.end,
+								title: `PLANNED-${date}`,
+                    items: [
+                        {
+										segmentStart: itemSegment.start,
+										segmentEnd: itemSegment.end,
+										category: "PLANNED",
+                            operatorCode: code,
+                            partNumber,
+                            workOrder: workOrderId,
+                            opBatchQty: batch,
+                            estPartAdd: estPart,
+                        },
+                    ],
+                },
+            });
+					lhtItemId = extractCreatedItemId(created, itemSegment.start);
+
+						if (created && typeof created === "object") {
+							const maybeCreated = created as Record<string, unknown>;
+							lhtGroupId = typeof maybeCreated.id === "string" ? maybeCreated.id : undefined;
+							lhtDeviceId = typeof maybeCreated.deviceId === "string" ? maybeCreated.deviceId : selectedDeviceId;
+						} else {
+							lhtDeviceId = selectedDeviceId;
+						}
 					}
 				}
-			} catch (error) {
-				console.error(error);
+        } catch (error) {
+            console.error(error);
 				toast.error(isEditMode ? "Failed to update assignment" : "Failed to save assignment");
-				return;
+            return;
 			}
 		} else {
 			toast.message("Saved locally (Lighthouse not configured)");
@@ -462,6 +555,26 @@ function AssignmentForm() {
 			lhtDeviceId,
 			lhtGroupId,
 		};
+
+		if (lhtDeviceId && lhtGroupId && !isEditMode) {
+			const assignment: Assignment = {
+				id: lhtGroupId,
+				workOrder: workOrderId,
+				...orderData,
+				lhtItemId,
+			};
+			setPlanningAssignments((prev) => {
+				const base = prev ? [...prev] : [];
+				const filtered = base.filter(
+					(item) =>
+						item.workOrder !== assignment.workOrder ||
+						item.lhtGroupId !== assignment.lhtGroupId ||
+						item.lhtDeviceId !== assignment.lhtDeviceId,
+				);
+				return [assignment, ...filtered];
+			});
+			setPlanningDataDate(date);
+		}
 
 		// Store locally keyed by Work Order id.
 		const existing = getOrderById(workOrderId);
@@ -550,7 +663,7 @@ function AssignmentForm() {
 		setMachine(deviceLabel(device));
 	}, [devices]);
 
-	return (
+    return (
 		<div className="flex flex-col min-h-screen bg-background-dashboard font-display">
 			<header className="sticky top-0 z-50 bg-white border-b border-gray-200 h-(--header-height) px-4 py-2">
 				<div className="flex items-center justify-between h-full">
@@ -564,18 +677,18 @@ function AssignmentForm() {
 							className="text-gray-500 font-bold text-xs uppercase hover:text-gray-700 active:scale-95 transition-transform"
 						>
 							Cancel
-						</button>
-						<button
-							onClick={handleSave}
+                        </button>
+                    <button
+                        onClick={handleSave}
 							className="bg-primary text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow-sm active:scale-95 transition-transform"
-						>
-							SAVE
-						</button>
+                    >
+                        SAVE
+                    </button>
 					</div>
-				</div>
-			</header>
+                </div>
+            </header>
 
-			<main className="p-4 space-y-6 pb-24">
+            <main className="p-4 space-y-6 pb-24">
 				<AssignmentDetailsCard
 					title={isEditMode ? "Assignment Details" : "New Assignment"}
 					icon={isEditMode ? "edit_note" : "precision_manufacturing"}
@@ -591,27 +704,27 @@ function AssignmentForm() {
 
 				{!isEditMode && (
 					<section className="space-y-2">
-						<div className="flex items-center justify-between px-1">
+                    <div className="flex items-center justify-between px-1">
 							<h3 className="font-bold text-sm uppercase tracking-wider text-gray-600">
 								Planned Queue <span className="text-gray-400 normal-case tracking-normal">({machine.split(" ")[0]})</span>
 							</h3>
-							<span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded">
+                        <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded">
 								{orders.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED").length} Tasks
-							</span>
-						</div>
-						<div className="space-y-2">
+                        </span>
+                    </div>
+                    <div className="space-y-2">
 							{orders
 								.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED")
-								.sort((a, b) => a.startTime.localeCompare(b.startTime))
-								.map((order) => (
-									<div key={order.id} className="bg-white border border-gray-100 p-3 rounded-lg flex items-center gap-3">
-										<div className="size-10 bg-gray-100 rounded flex items-center justify-center shrink-0 text-gray-400">
-											<span className="material-symbols-outlined text-xl">
+                            .sort((a, b) => a.startTime.localeCompare(b.startTime))
+                            .map((order) => (
+                                <div key={order.id} className="bg-white border border-gray-100 p-3 rounded-lg flex items-center gap-3">
+                                    <div className="size-10 bg-gray-100 rounded flex items-center justify-center shrink-0 text-gray-400">
+                                        <span className="material-symbols-outlined text-xl">
 												{order.status === "ACTIVE" ? "play_circle" : order.status === "COMPLETED" ? "check_circle" : "schedule"}
-											</span>
-										</div>
-										<div className="flex-1 min-w-0">
-											<div className="flex justify-between items-start">
+                                        </span>
+                                    </div>
+                                    <div className="flex-1 min-w-0">
+                                        <div className="flex justify-between items-start">
 												<p className="font-bold text-sm truncate text-gray-800">
 													{order.id} • {order.partNumber}
 												</p>
@@ -623,27 +736,27 @@ function AssignmentForm() {
 															: "text-gray-400 bg-gray-50"
 														}`}
 												>
-													{order.status}
-												</span>
-											</div>
+                                                {order.status}
+                                            </span>
+                                        </div>
 											<p className="text-[11px] text-gray-500 font-medium">
 												Op {order.opNumber} • {order.operator.split(" ")[0]} • {order.shift}
-											</p>
-										</div>
-									</div>
-								))}
+                                        </p>
+                                    </div>
+                                </div>
+                            ))}
 
 							{orders.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED").length === 0 && (
-								<div className="text-center py-6 text-gray-400 text-xs italic bg-gray-50/50 rounded-lg border border-dashed border-gray-200">
+                            <div className="text-center py-6 text-gray-400 text-xs italic bg-gray-50/50 rounded-lg border border-dashed border-gray-200">
 									No active queue for {machine.split(" ")[0]} on this date.
-								</div>
-							)}
-						</div>
-					</section>
+                            </div>
+                        )}
+                    </div>
+                </section>
 				)}
-			</main>
-		</div>
-	);
+            </main>
+        </div>
+    );
 }
 
 export default function CreateAssignmentPage() {
@@ -651,5 +764,5 @@ export default function CreateAssignmentPage() {
 		<Suspense fallback={<div>Loading...</div>}>
 			<AssignmentForm />
 		</Suspense>
-	);
+    );
 }
