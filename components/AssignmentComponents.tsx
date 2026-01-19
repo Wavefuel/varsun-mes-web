@@ -18,9 +18,8 @@ export function AssignmentSelect({ className = "", containerClassName = "", chil
 		<div className={`relative ${containerClassName}`}>
 			<select
 				disabled={disabled}
-				className={`w-full bg-gray-50 border border-gray-200 !rounded-lg !py-3 !px-3 !text-xs appearance-none focus:ring-primary focus:border-primary ${
-					disabled ? "cursor-not-allowed text-gray-500" : ""
-				} ${className}`}
+				className={`w-full bg-gray-50 border border-gray-200 !rounded-lg !py-3 !pl-3 !pr-10 !text-xs appearance-none focus:ring-primary focus:border-primary truncate ${disabled ? "cursor-not-allowed text-gray-500" : ""
+					} ${className}`}
 				{...props}
 			>
 				{children}
@@ -40,9 +39,8 @@ export function AssignmentInput({ className = "", disabled, hasError = false, ..
 	return (
 		<input
 			disabled={disabled}
-			className={`w-full bg-gray-50 border !rounded-lg !py-3 !px-3 !text-xs focus:ring-primary focus:border-primary transiton-colors ${
-				hasError ? "border-red-500 bg-red-50" : "border-gray-200"
-			} ${disabled ? "cursor-not-allowed text-gray-500" : ""} ${className}`}
+			className={`w-full bg-gray-50 border !rounded-lg !py-3 !px-3 !text-xs focus:ring-primary focus:border-primary transiton-colors ${hasError ? "border-red-500 bg-red-50" : "border-gray-200"
+				} ${disabled ? "cursor-not-allowed text-gray-500" : ""} ${className}`}
 			{...props}
 		/>
 	);

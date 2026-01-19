@@ -11,6 +11,7 @@ import EmptyState from "@/components/EmptyState";
 import { useData } from "@/context/DataContext";
 import type { Order } from "@/lib/types";
 import { fetchDeviceList, readDeviceStateEventGroupsWithItemsByCluster, type DeviceSummary } from "@/utils/scripts";
+import { formatTimeToIST, getISTDate } from "@/utils/dateUtils";
 
 function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
@@ -37,16 +38,14 @@ export default function StockPage() {
 		if (!value) return "";
 		const date = value instanceof Date ? value : new Date(value);
 		if (Number.isNaN(date.getTime())) return String(value);
-		return date.toISOString().slice(11, 16);
+		return formatTimeToIST(date);
 	};
 
 	const toLocalYYYYMMDD = (iso: string) => {
-		const d = new Date(iso);
-		if (Number.isNaN(d.getTime())) return "";
-		const yyyy = String(d.getFullYear());
-		const mm = String(d.getMonth() + 1).padStart(2, "0");
-		const dd = String(d.getDate()).padStart(2, "0");
-		return `${yyyy}-${mm}-${dd}`;
+		const d = getISTDate(iso);
+		if (!d) return "";
+		// Return YYYY-MM-DD based on IST date
+		return d.toISOString().split("T")[0];
 	};
 
 	const formatDateForDisplay = (dateStr: string) => {

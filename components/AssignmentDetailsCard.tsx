@@ -92,6 +92,11 @@ export default function AssignmentDetailsCard({
 					<AssignmentField label="Machine">
 						<AssignmentSelect
 							value={selectedDeviceId || data.machine}
+							title={
+								devices.length
+									? deviceLabel(devices.find((d) => d.id === (selectedDeviceId || data.machine)))
+									: data.machine
+							}
 							onChange={(e) => {
 								const nextId = e.target.value;
 								if (devices.length) {
@@ -105,19 +110,22 @@ export default function AssignmentDetailsCard({
 							disabled={readOnly}
 						>
 							{devices.length
-								? devices.map((device) => (
-									<option key={device.id} value={device.id}>
-										{deviceLabel(device)}
-									</option>
-								))
+								? devices.map((device) => {
+									const label = deviceLabel(device);
+									return (
+										<option key={device.id} value={device.id} title={label}>
+											{label.length > 25 ? label.substring(0, 25) + "..." : label}
+										</option>
+									);
+								})
 								: [
-									<option key="cnc" value="CNC-042 (Alpha)">
+									<option key="cnc" value="CNC-042 (Alpha)" title="CNC-042 (Alpha)">
 										CNC-042 (Alpha)
 									</option>,
-									<option key="lath" value="LATH-09 (Beta)">
+									<option key="lath" value="LATH-09 (Beta)" title="LATH-09 (Beta)">
 										LATH-09 (Beta)
 									</option>,
-									<option key="mill" value="MILL-12 (Gamma)">
+									<option key="mill" value="MILL-12 (Gamma)" title="MILL-12 (Gamma)">
 										MILL-12 (Gamma)
 									</option>,
 								]}
