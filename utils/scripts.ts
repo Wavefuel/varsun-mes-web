@@ -803,3 +803,91 @@ export async function fetchDeviceList(data: FetchDeviceListData): Promise<Device
 		throw error;
 	}
 }
+
+export interface FetchDeviceStatusPeriodsData {
+	deviceId: string;
+	clusterId: string;
+	applicationId?: string;
+	query?: {
+		deviceStatus?: string;
+		fromDate?: Date | string;
+		toDate?: Date | string;
+		minDurationMinutes?: number;
+	};
+}
+
+export interface DeviceStatusPeriod {
+	status: string;
+	startTime: string;
+	endTime: string;
+	durationSeconds: number;
+	durationMinutes: number;
+	isOngoing: boolean;
+}
+
+export interface FetchDeviceStatusPeriodsResponse {
+	data: DeviceStatusPeriod[];
+	totalPeriods: number;
+	queryParams: {
+		deviceStatus: string | null;
+		fromDate: string;
+		toDate: string;
+		minDurationMinutes: number;
+	};
+}
+
+/**
+ * Fetches device status periods that meet a minimum duration threshold.
+ * Returns all device states or a specific state if deviceStatus is provided.
+ * 
+ * @param data - The data required to fetch status periods
+ * @returns Device status periods with duration information
+ * 
+ * @example
+ * // Get all states >= 15 mins for today
+ * const result = await fetchDeviceStatusPeriods({
+ *   deviceId: "device-123",
+ *   clusterId: "cluster-456"
+ * });
+ * 
+ * // Get IDLE periods >= 20 mins for a specific date range
+ * const result = await fetchDeviceStatusPeriods({
+ *   deviceId: "device-123",
+ *   clusterId: "cluster-456",
+ *   query: {
+ *     deviceStatus: "IDLE",
+ *     fromDate: "2025-01-01T00:00:00Z",
+ *     toDate: "2025-01-02T00:00:00Z",
+ *     minDurationMinutes: 20
+ *   }
+ * });
+ */
+export async function fetchDeviceStatusPeriods(data: FetchDeviceStatusPeriodsData): Promise<FetchDeviceStatusPeriodsResponse> {
+	try {
+		if (!data.deviceId) {
+			throw new Error("Invalid Input, deviceId is required.");
+		}
+		if (!data.clusterId) {
+			throw new Error("Invalid Input, clusterId is required.");
+		}
+
+		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
+		const deviceStateEventsUrl = `${data.clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
+
+		const response = await lightHouseAPIHandler.get(
+			`${deviceStateEventsUrl}/status-periods`,
+			{
+				params: {
+					...(data.query?.deviceStatus && { deviceStatus: data.query.deviceStatus }),
+					...(data.query?.fromDate && { fromDate: data.query.fromDate }),
+					...(data.query?.toDate && { toDate: data.query.toDate }),
+					...(data.query?.minDurationMinutes && { minDurationMinutes: data.query.minDurationMinutes }),
+				},
+			}
+		);
+
+		return response.data;
+	} catch (error) {
+		throw error;
+	}
+}
