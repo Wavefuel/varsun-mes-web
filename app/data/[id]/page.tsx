@@ -3,7 +3,7 @@
 import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { clsx } from "clsx";
-import { ReasonCodeSelect } from "@/components/ReasonCodeSelect";
+import { ReasonCodeSelect, getReasonCategory, getReasonDescription } from "@/components/ReasonCodeSelect";
 import EmptyState from "@/components/EmptyState";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
@@ -25,9 +25,6 @@ import {
 	DeviceStateEventItemUpdateInput,
 } from "@/utils/scripts";
 
-const IDLE_CODES = ["Breakdown", "No Operator", "No Work / Material", "Tool Change", "Operator Break", "Machine Setup", "Quality Check"];
-
-const OFFLINE_CODES = ["Power Loss", "MCB Trip", "Sensor Failure", "Network Issue", "Emergency Stop"];
 
 interface DowntimeEvent {
 	id: string;
@@ -49,48 +46,6 @@ interface DowntimeEvent {
 	tagsText: string;
 }
 
-const getCategoryForReasonCode = (reasonCode: string) => {
-	const normalized = reasonCode.trim();
-	if (IDLE_CODES.includes(normalized)) {
-		switch (normalized) {
-			case "Breakdown":
-				return "OUTAGE";
-			case "No Operator":
-				return "PRODUCTION_SETUP";
-			case "No Work / Material":
-				return "MATERIAL_LOADING";
-			case "Tool Change":
-				return "TOOL_CHANGE";
-			case "Operator Break":
-				return "PRODUCTION_SETUP";
-			case "Machine Setup":
-				return "EQUIPMENT_SETUP";
-			case "Quality Check":
-				return "QUALITY_CHECK";
-			default:
-				return "MAINTENANCE";
-		}
-	}
-
-	if (OFFLINE_CODES.includes(normalized)) {
-		switch (normalized) {
-			case "Power Loss":
-				return "POWER";
-			case "MCB Trip":
-				return "POWER";
-			case "Sensor Failure":
-				return "ANOMALY";
-			case "Network Issue":
-				return "CONNECTIVITY";
-			case "Emergency Stop":
-				return "SAFETY";
-			default:
-				return "OUTAGE";
-		}
-	}
-
-	return "OTHER";
-};
 
 const buildUtcRangeFromIstDate = (dateStr: string, currentShift: string) => {
 	const [year, month, day] = dateStr.split("-").map(Number);
@@ -299,7 +254,7 @@ export default function MachineTaggingPage() {
 						durationMinutes: actualDurationMinutes,
 						itemId: matchedItem?.id ?? null,
 						groupId: matchedItem?.groupId ?? null,
-						reason: reasonCode,
+						reason: reasonCode ? String(reasonCode) : "",
 
 						category: matchedItem?.category ?? null,
 						notes: matchedItem?.notes ?? "",
@@ -578,8 +533,11 @@ function EventCard({
 
 			const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate, currentShift);
 			const account = {};
-			const category = getCategoryForReasonCode(reason);
-			const metadata = { reasonCode: reason };
+			const category = getReasonCategory(reason);
+			const metadata = {
+				reasonCode: Number(reason),
+				reasonDescription: getReasonDescription(reason),
+			};
 
 			const existingGroups = await readDeviceStateEventGroupsWithItems({
 				deviceId: machineId,

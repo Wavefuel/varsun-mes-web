@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import { ReasonCodeSelect } from "@/components/ReasonCodeSelect";
+import { ReasonCodeSelect, getReasonCategory, getReasonDescription, getReasonLabel } from "@/components/ReasonCodeSelect";
 import { useData } from "@/context/DataContext";
 import {
 	createDeviceStateEventGroup,
@@ -24,52 +24,6 @@ function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
 }
 
-const IDLE_CODES = ["Breakdown", "No Operator", "No Work / Material", "Tool Change", "Operator Break", "Machine Setup", "Quality Check"];
-
-const OFFLINE_CODES = ["Power Loss", "MCB Trip", "Sensor Failure", "Network Issue", "Emergency Stop"];
-
-const getCategoryForReasonCode = (reasonCode: string) => {
-	const normalized = reasonCode.trim();
-	if (IDLE_CODES.includes(normalized)) {
-		switch (normalized) {
-			case "Breakdown":
-				return "OUTAGE";
-			case "No Operator":
-				return "PRODUCTION_SETUP";
-			case "No Work / Material":
-				return "MATERIAL_LOADING";
-			case "Tool Change":
-				return "TOOL_CHANGE";
-			case "Operator Break":
-				return "PRODUCTION_SETUP";
-			case "Machine Setup":
-				return "EQUIPMENT_SETUP";
-			case "Quality Check":
-				return "QUALITY_CHECK";
-			default:
-				return "MAINTENANCE";
-		}
-	}
-
-	if (OFFLINE_CODES.includes(normalized)) {
-		switch (normalized) {
-			case "Power Loss":
-				return "POWER";
-			case "MCB Trip":
-				return "POWER";
-			case "Sensor Failure":
-				return "ANOMALY";
-			case "Network Issue":
-				return "CONNECTIVITY";
-			case "Emergency Stop":
-				return "SAFETY";
-			default:
-				return "OUTAGE";
-		}
-	}
-
-	return "OTHER";
-};
 
 const buildUtcRangeFromIstDate = (dateStr: string) => {
 	const [year, month, day] = dateStr.split("-").map(Number);
@@ -90,7 +44,7 @@ const normalizeIso = (value?: string | Date | null) => {
 const metadataToArray = (value: unknown) => {
 	if (!value || typeof value !== "object") return [] as Array<{ key: string; value: string }>;
 	return Object.entries(value as Record<string, unknown>)
-		.filter(([key]) => !["reasonCode", "category", "tags", "Tags"].includes(key))
+		.filter(([key]) => !["reasonCode", "reasonDescription", "category", "tags", "Tags"].includes(key))
 		.map(([key, val]) => ({ key, value: String(val) }));
 };
 
@@ -199,7 +153,7 @@ export default function EventGroupingPage() {
 						rawEndTime: period.endTime ?? new Date().toISOString(),
 						startTime: toIstTime(period.startTime),
 						endTime: period.isOngoing ? "now" : toIstTime(period.endTime),
-						reason: reasonCode,
+						reason: reasonCode ? String(reasonCode) : "",
 						category: matchedItem?.category ?? null,
 						notes: matchedItem?.notes ?? "",
 						metadata: matchedItem?.metadata ?? null,
@@ -259,11 +213,12 @@ export default function EventGroupingPage() {
 
 			const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate);
 			const account = {};
-			const category = getCategoryForReasonCode(reason);
+			const category = getReasonCategory(reason);
 			const metadataObj = metadataFromArray(metadata);
 			const metadataPayload = {
 				...(metadataObj ?? {}),
-				reasonCode: reason,
+				reasonCode: Number(reason),
+				reasonDescription: getReasonDescription(reason),
 				...(tagsText.trim() ? { Tags: tagsText.trim() } : {}),
 			};
 
@@ -292,7 +247,7 @@ export default function EventGroupingPage() {
 				segmentEnd: eventData.rawEndTime,
 				state: eventData.type,
 				category,
-				scopeType: "DEVICE_STATUS",
+				scopeType: "DEVICE_STATUS" as const,
 				notes,
 				metadata: metadataPayload,
 			};
@@ -489,9 +444,7 @@ export default function EventGroupingPage() {
 							<div className="space-y-1.5">
 								<label className="block text-[11px] font-bold text-gray-500 uppercase ml-1">Reason Code</label>
 								<ReasonCodeSelect value={reason} onChange={setReason} eventType={eventData.type} />
-								{reason ? (
-									<p className="text-[10px] font-semibold text-gray-600">{`${reason} - ${getCategoryForReasonCode(reason)}`}</p>
-								) : null}
+								{reason ? <p className="text-[10px] font-semibold text-gray-600">{getReasonLabel(reason)}</p> : null}
 							</div>
 
 							{/* Metadata */}

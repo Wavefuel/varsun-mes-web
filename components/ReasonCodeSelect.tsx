@@ -11,63 +11,92 @@ interface ReasonCodeSelectProps {
 	className?: string;
 }
 
-const IDLE_CODES = ["Breakdown", "No Operator", "No Work / Material", "Tool Change", "Operator Break", "Machine Setup", "Quality Check"];
-
-const OFFLINE_CODES = ["Power Loss", "MCB Trip", "Sensor Failure", "Network Issue", "Emergency Stop"];
-
-const getCategoryForReasonCode = (reasonCode: string) => {
-	const normalized = reasonCode.trim();
-	if (IDLE_CODES.includes(normalized)) {
-		switch (normalized) {
-			case "Breakdown":
-				return "OUTAGE";
-			case "No Operator":
-				return "PRODUCTION_SETUP";
-			case "No Work / Material":
-				return "MATERIAL_LOADING";
-			case "Tool Change":
-				return "TOOL_CHANGE";
-			case "Operator Break":
-				return "PRODUCTION_SETUP";
-			case "Machine Setup":
-				return "EQUIPMENT_SETUP";
-			case "Quality Check":
-				return "QUALITY_CHECK";
-			default:
-				return "MAINTENANCE";
-		}
-	}
-
-	if (OFFLINE_CODES.includes(normalized)) {
-		switch (normalized) {
-			case "Power Loss":
-				return "POWER";
-			case "MCB Trip":
-				return "POWER";
-			case "Sensor Failure":
-				return "ANOMALY";
-			case "Network Issue":
-				return "CONNECTIVITY";
-			case "Emergency Stop":
-				return "SAFETY";
-			default:
-				return "OUTAGE";
-		}
-	}
-
-	return "OTHER";
+export type ReasonCodeEntry = {
+	code: string;
+	description: string;
+	category: string;
 };
 
-const getDisplayLabel = (code: string) => `${code} - ${getCategoryForReasonCode(code)}`;
+export const OFFLINE_REASON_CODES: ReasonCodeEntry[] = [
+	{ code: "11", description: "No Power", category: "OUTAGE" },
+	{ code: "12", description: "MCB Fault", category: "OUTAGE" },
+	{ code: "13", description: "Sensor Fault", category: "CALIBRATION" },
+	{ code: "14", description: "Breakdown", category: "OUTAGE" },
+	{ code: "19", description: "Other", category: "OTHER" },
+];
+
+export const IDLE_REASON_CODES: ReasonCodeEntry[] = [
+	{ code: "21", description: "Breakdown", category: "OUTAGE" },
+	{ code: "22", description: "No Operator", category: "LABOR_UNAVAILABLE" },
+	{ code: "23", description: "No Work", category: "WORK_UNAVAILABLE" },
+	{ code: "24", description: "No Feed", category: "MATERIAL_SHORTAGE" },
+	{ code: "25", description: "In Setting", category: "PRODUCTION_SETUP" },
+	{ code: "26", description: "Under Inspection", category: "QUALITY_CHECK" },
+	{ code: "27", description: "Waiting for Inspector", category: "QUALITY_CHECK" },
+	{ code: "29", description: "Other", category: "OTHER" },
+];
+
+export const ONLINE_REASON_CODES: ReasonCodeEntry[] = [
+	{ code: "31", description: "Load", category: "ONLINE" },
+	{ code: "32", description: "No Load", category: "ONLINE" },
+	{ code: "33", description: "High Speed", category: "ONLINE" },
+	{ code: "34", description: "Low Speed", category: "ONLINE" },
+];
+
+export const UNAVAILABLE_REASON_CODES: ReasonCodeEntry[] = [
+	{ code: "39", description: "Unavailable", category: "UNAVAILABLE" },
+];
+
+const REASON_CODE_MAP: Record<string, ReasonCodeEntry> = [
+	...OFFLINE_REASON_CODES,
+	...IDLE_REASON_CODES,
+	...ONLINE_REASON_CODES,
+	...UNAVAILABLE_REASON_CODES,
+].reduce(
+	(acc, entry) => {
+		acc[entry.code] = entry;
+		return acc;
+	},
+	{} as Record<string, ReasonCodeEntry>,
+);
+
+export const getReasonCategory = (reasonCode: string) => REASON_CODE_MAP[reasonCode]?.category ?? "OTHER";
+
+export const getReasonDescription = (reasonCode: string) => REASON_CODE_MAP[reasonCode]?.description ?? "";
+
+export const getReasonLabel = (reasonCode: string) => {
+	const entry = REASON_CODE_MAP[reasonCode];
+	return entry ? `${entry.code} - ${entry.description} - ${entry.category}` : reasonCode;
+};
 
 export function ReasonCodeSelect({ value, onChange, eventType, className }: ReasonCodeSelectProps) {
 	const [isOpen, setIsOpen] = useState(false);
 	const containerRef = useRef<HTMLDivElement>(null);
 
 	// Determine which codes to show based on event type
-	const isOffline = eventType === "Offline";
-	const codes = isOffline ? OFFLINE_CODES : IDLE_CODES;
-	const categoryLabel = isOffline ? "Offline Codes" : "Idle Codes";
+	const normalizedType = String(eventType).toLowerCase();
+	const isOffline = normalizedType === "offline";
+	const isIdle = normalizedType === "idle" || normalizedType === "standby";
+	const isRunning = normalizedType === "running" || normalizedType === "active";
+	const isUnavailable = normalizedType === "unavailable";
+	const codes = isOffline
+		? IDLE_REASON_CODES
+		: isIdle
+			? OFFLINE_REASON_CODES
+			: isRunning
+				? ONLINE_REASON_CODES
+				: isUnavailable
+					? UNAVAILABLE_REASON_CODES
+					: IDLE_REASON_CODES;
+	const categoryLabel = isOffline
+		? "Idle Codes"
+		: isIdle
+			? "Offline Codes"
+			: isRunning
+				? "Online Codes"
+				: isUnavailable
+					? "Unavailable"
+					: "Idle Codes";
 
 	useEffect(() => {
 		const handleClickOutside = (event: MouseEvent) => {
@@ -96,7 +125,7 @@ export function ReasonCodeSelect({ value, onChange, eventType, className }: Reas
 				)}
 			>
 				<span className={cn("truncate", !value && "text-gray-400 font-medium")}>
-					{value ? getDisplayLabel(value) : "Select a reason..."}
+					{value ? getReasonLabel(value) : "Select a reason..."}
 				</span>
 				<span
 					className={cn("material-symbols-outlined text-gray-400 !text-[18px] transition-transform duration-200", isOpen && "rotate-180")}
@@ -111,15 +140,15 @@ export function ReasonCodeSelect({ value, onChange, eventType, className }: Reas
 					<div className="p-1.5 space-y-0.5">
 						{codes.map((code) => (
 							<button
-								key={code}
+								key={code.code}
 								type="button"
-								onClick={() => handleSelect(code)}
+								onClick={() => handleSelect(code.code)}
 								className={cn(
 									"w-full text-left px-3 py-2 text-xs font-bold text-gray-700 rounded-md transition-colors hover:bg-gray-50",
-									value === code && "bg-primary/5 text-primary",
+									value === code.code && "bg-primary/5 text-primary",
 								)}
 							>
-								{getDisplayLabel(code)}
+								{getReasonLabel(code.code)}
 							</button>
 						))}
 					</div>
