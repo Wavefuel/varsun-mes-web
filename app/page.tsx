@@ -137,7 +137,13 @@ export default function Home() {
 					})();
 
 					const items = Array.isArray(group?.Items) ? group.Items : [];
+					const rangeStartMs = new Date(startRange).getTime();
+					const rangeEndMs = new Date(endRange).getTime();
+
 					return items.flatMap((item) => {
+						const segmentStart = item?.segmentStart ? new Date(item.segmentStart).getTime() : 0;
+						if (segmentStart < rangeStartMs || segmentStart >= rangeEndMs) return [];
+
 						const metadata = item?.metadata ?? {};
 						const workOrder = String(metadata.workOrder ?? "");
 						if (!workOrder) return [];
@@ -167,6 +173,9 @@ export default function Home() {
 								estPart,
 								target: batch,
 								status,
+								actualOutput: Number(metadata.actualOutput ?? 0),
+								toolChanges: Number(metadata.toolChanges ?? 0),
+								rejects: Number(metadata.rejects ?? 0),
 								lhtDeviceId: deviceId || undefined,
 								lhtGroupId: groupId,
 								lhtItemId: itemId,
@@ -208,19 +217,29 @@ export default function Home() {
 	// Use globalAssignments if available (and we are in lighthouse mode), otherwise local orders
 	const sourceOrders = lighthouseEnabled ? ((globalAssignments as any[]) ?? []) : orders;
 
-	// Filter all orders by the global currentDate
-	const todaysOrders = sourceOrders.filter((o) => o.date === currentDate);
+	// Filter all orders by the global currentDate and currentShift
+	const todaysOrders = sourceOrders.filter((o) => o.date === currentDate && (String(o.shift).includes(currentShift) || o.shift === currentShift));
 
 	const activeOrders = todaysOrders.filter((o) => o.status === "PLANNED" || o.status === "ACTIVE");
 	const completedOrders = todaysOrders.filter((o) => o.status === "COMPLETED");
 
 	const activeCount = activeOrders.length;
 
-	// Projected Output: Sum of targets of active orders
-	const projectedOutput = activeOrders.reduce((sum, order) => sum + (order.target || 0), 0);
+	// Projected Output Metric: total actual vs total target for this shift
+	const totalTarget = todaysOrders.reduce((sum, order) => sum + (order.target || 0), 0);
+	const totalActual = todaysOrders.reduce((sum, order) => sum + (order.actualOutput || 0), 0);
 
-	// Format huge numbers
-	const displayProjected = projectedOutput > 1000 ? (projectedOutput / 1000).toFixed(1) + "k" : projectedOutput;
+	const formatNumber = (num: number) => {
+		if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
+		if (num >= 1000) return (num / 1000).toFixed(1) + "K";
+		return num.toString();
+	};
+
+	const displayProjected = `${formatNumber(totalActual)} / ${formatNumber(totalTarget)}`;
+
+	// Efficiency: (Actual / Target) * 100
+	const efficiencyValue = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
+	const displayEfficiency = efficiencyValue.toFixed(1) + "%";
 
 	// Active Machines: Unique machines in active orders
 	const activeMachines = new Set(activeOrders.map((o) => o.machine)).size;
@@ -281,18 +300,18 @@ export default function Home() {
 					<Card className="p-4">
 						<div className="flex justify-between items-start mb-2">
 							<span className="material-symbols-outlined text-green-600 !text-xl !leading-none py-0.5">bolt</span>
-							<Badge variant="success" className="px-1 py-0">
-								+2%
-							</Badge>
+							{/* <Badge variant="success" className="px-1 py-0">
+								Live
+							</Badge> */}
 						</div>
-						<MetricValue>94.2%</MetricValue>
+						<MetricValue>{displayEfficiency}</MetricValue>
 						<MetricLabel>Plant Efficiency</MetricLabel>
 					</Card>
 					<Card className="p-4">
 						<div className="flex justify-between items-start mb-2">
 							<span className="material-symbols-outlined text-primary !text-xl !leading-none py-0.5">precision_manufacturing</span>
 						</div>
-						<MetricValue>{activeMachines}/10</MetricValue>
+						<MetricValue>{activeMachines}</MetricValue>
 						<MetricLabel>Machines Active</MetricLabel>
 					</Card>
 					<Card className="p-4">
@@ -300,7 +319,7 @@ export default function Home() {
 							<span className="material-symbols-outlined text-orange-500 !text-xl !leading-none py-0.5">trending_up</span>
 						</div>
 						<MetricValue>{displayProjected}</MetricValue>
-						<MetricLabel>Projected Output</MetricLabel>
+						<MetricLabel>Production Progress</MetricLabel>
 					</Card>
 				</section>
 
@@ -318,7 +337,7 @@ export default function Home() {
 							const displayId = (order as Assignment).workOrder || order.id;
 							return (
 								<Card key={order.id} className="p-4">
-									<div className="flex justify-between items-start mb-3">
+									<div className="flex justify-between items-start">
 										<div>
 											<p className="text-sm font-bold font-display text-primary">{displayId}</p>
 											<p className="text-xs-plus text-gray-500 font-medium mt-0.5">
@@ -326,16 +345,6 @@ export default function Home() {
 											</p>
 										</div>
 										<Badge>{order.partNumber}</Badge>
-									</div>
-									{/* Simulated Progress Bar since we don't have real live data yet */}
-									<div className="space-y-1.5">
-										<div className="flex justify-between items-center text-xs-plus">
-											<span className="font-bold text-gray-500">Progress</span>
-											<span className="font-bold text-primary">0%</span>
-										</div>
-										<div className="h-2 w-full bg-gray-100 rounded-full overflow-hidden">
-											<div className="h-full bg-primary rounded-full" style={{ width: "0%" }}></div>
-										</div>
 									</div>
 								</Card>
 							);
@@ -347,7 +356,7 @@ export default function Home() {
 				{/* Completed Work Orders */}
 				<section className="space-y-3 pb-4">
 					<div className="flex items-center justify-between px-1">
-						<SectionTitle>Completed Today</SectionTitle>
+						<SectionTitle>Completed Orders</SectionTitle>
 					</div>
 
 					<Card className="overflow-hidden">
@@ -361,8 +370,17 @@ export default function Home() {
 											<p className="text-2xs text-gray-500 uppercase font-bold tracking-tight">{order.partNumber}</p>
 										</div>
 										<div className="text-right shrink-0">
-											<p className="text-xs-plus font-bold text-primary">
-												{order.actualOutput} / {order.target}
+											<p
+												className={`text-xs-plus font-bold ${(() => {
+													const actual = order.actualOutput || 0;
+													const target = order.target || 1;
+													const percent = (actual / target) * 100;
+													if (percent < 75) return "text-red-500";
+													if (percent < 90) return "text-amber-500";
+													return "text-primary";
+												})()}`}
+											>
+												{formatNumber(order.actualOutput || 0)} / {formatNumber(order.target || 0)}
 											</p>
 											<Link
 												href={`/stock/${encodeURIComponent(order.id)}`}

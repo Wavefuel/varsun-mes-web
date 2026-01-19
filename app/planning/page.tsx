@@ -199,7 +199,13 @@ export default function PlanningPage() {
 					})();
 
 					const items = Array.isArray(group?.Items) ? group.Items : [];
+					const rangeStartMs = new Date(start!).getTime();
+					const rangeEndMs = new Date(end!).getTime();
+
 					return items.flatMap((item) => {
+						const segmentStart = item?.segmentStart ? new Date(item.segmentStart).getTime() : 0;
+						if (segmentStart < rangeStartMs || segmentStart >= rangeEndMs) return [];
+
 						const metadata = item?.metadata ?? {};
 						const workOrder = String(metadata.workOrder ?? "");
 						if (!workOrder) return [];
