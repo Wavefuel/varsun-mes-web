@@ -14,7 +14,110 @@ import SearchFilterBar from "@/components/SearchFilterBar";
 import Loader from "@/components/Loader";
 
 import { fetchDeviceList, type DeviceSummary } from "@/utils/scripts";
-import { fetchDeviceStatusPeriods, DeviceStatusPeriod } from "@/utils/scripts";
+import {
+	createDeviceStateEventGroup,
+	createDeviceStateEventGroupItems,
+	fetchDeviceStatusPeriods,
+	readDeviceStateEventGroupsWithItems,
+	updateDeviceStateEventGroupItems,
+	DeviceStatusPeriod,
+} from "@/utils/scripts";
+
+const IDLE_CODES = ["Breakdown", "No Operator", "No Work / Material", "Tool Change", "Operator Break", "Machine Setup", "Quality Check"];
+
+const OFFLINE_CODES = ["Power Loss", "MCB Trip", "Sensor Failure", "Network Issue", "Emergency Stop"];
+
+const getCategoryForReasonCode = (reasonCode: string) => {
+	const normalized = reasonCode.trim();
+	if (IDLE_CODES.includes(normalized)) {
+		switch (normalized) {
+			case "Breakdown":
+				return "OUTAGE";
+			case "No Operator":
+				return "PRODUCTION_SETUP";
+			case "No Work / Material":
+				return "MATERIAL_LOADING";
+			case "Tool Change":
+				return "TOOL_CHANGE";
+			case "Operator Break":
+				return "PRODUCTION_SETUP";
+			case "Machine Setup":
+				return "EQUIPMENT_SETUP";
+			case "Quality Check":
+				return "QUALITY_CHECK";
+			default:
+				return "MAINTENANCE";
+		}
+	}
+
+	if (OFFLINE_CODES.includes(normalized)) {
+		switch (normalized) {
+			case "Power Loss":
+				return "POWER";
+			case "MCB Trip":
+				return "POWER";
+			case "Sensor Failure":
+				return "ANOMALY";
+			case "Network Issue":
+				return "CONNECTIVITY";
+			case "Emergency Stop":
+				return "SAFETY";
+			default:
+				return "OUTAGE";
+		}
+	}
+
+	return "OTHER";
+};
+
+const buildUtcRangeFromIstDate = (dateStr: string) => {
+	const [year, month, day] = dateStr.split("-").map(Number);
+	const utcMidnight = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+	const utcEndOfDay = Date.UTC(year, month - 1, day, 23, 59, 59, 999);
+	const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+	const fromDateUTC = new Date(utcMidnight - IST_OFFSET_MS);
+	const toDateUTC = new Date(utcEndOfDay - IST_OFFSET_MS);
+	return { fromDateUTC, toDateUTC };
+};
+
+const normalizeIso = (value?: string | Date | null) => {
+	if (!value) return "";
+	const parsed = value instanceof Date ? value : new Date(value);
+	return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString();
+};
+
+const serializeMetadata = (value: unknown) => {
+	if (!value) return "";
+	if (typeof value === "string") return value;
+	if (typeof value !== "object") return String(value);
+	return Object.entries(value as Record<string, unknown>)
+		.map(([key, val]) => `${key}:${String(val)}`)
+		.join(", ");
+};
+
+const parseMetadata = (input: string) => {
+	const text = input.trim();
+	if (!text) return undefined;
+	const entries = text
+		.split(",")
+		.map((part) => part.trim())
+		.filter(Boolean)
+		.map((pair) => {
+			const [rawKey, ...rest] = pair.split(/[:=]/);
+			const key = rawKey?.trim();
+			const value = rest.join(":").trim();
+			return key ? [key, value || ""] : null;
+		})
+		.filter(Boolean) as Array<[string, string]>;
+	if (!entries.length) return undefined;
+	return Object.fromEntries(entries);
+};
+
+const parseTags = (input: string) =>
+	input
+		.split(",")
+		.map((tag) => tag.trim())
+		.filter(Boolean);
 
 export default function MachineTaggingPage() {
 	const router = useRouter();
@@ -77,27 +180,8 @@ export default function MachineTaggingPage() {
 				// IST is UTC+5:30, so to get UTC time from IST, subtract 5.5 hours:
 				// IST 2026-01-17 00:00:00 = UTC 2026-01-16 18:30:00
 				// IST 2026-01-17 23:59:59 = UTC 2026-01-17 18:29:59
-				const [year, month, day] = currentDate.split("-").map(Number);
+				const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate);
 
-				// Create UTC dates at midnight for the given day
-				const utcMidnight = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
-				const utcEndOfDay = Date.UTC(year, month - 1, day, 23, 59, 59, 999);
-
-				// Subtract 5.5 hours (IST offset) to get the UTC time that corresponds to IST midnight
-				const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-				const fromDateUTC = new Date(utcMidnight - IST_OFFSET_MS);
-				const toDateUTC = new Date(utcEndOfDay - IST_OFFSET_MS);
-
-				console.log("Date Conversion Debug:", {
-					currentDateString: currentDate,
-					parsedValues: { year, month, day },
-					utcMidnightTimestamp: utcMidnight,
-					utcMidnightISO: new Date(utcMidnight).toISOString(),
-					fromDateUTC: fromDateUTC.toISOString(),
-					toDateUTC: toDateUTC.toISOString(),
-					expectedISTStart: `${currentDate} 00:00:00 IST`,
-					expectedISTEnd: `${currentDate} 23:59:59 IST`,
-				});
 
 				const result = await fetchDeviceStatusPeriods({
 					deviceId: machineId,
@@ -108,6 +192,27 @@ export default function MachineTaggingPage() {
 						minDurationMinutes: 15,
 					},
 				});
+
+				const account = {};
+				const groups = await readDeviceStateEventGroupsWithItems({
+					deviceId: machineId,
+					clusterId,
+					account,
+					query: {
+						rangeStart: fromDateUTC.toISOString(),
+						rangeEnd: toDateUTC.toISOString(),
+					},
+				});
+				const groupItems = Array.isArray(groups)
+					? groups.flatMap((group) => {
+						const items = Array.isArray(group?.Items) ? group.Items : [];
+						return items.map((item) => ({
+							...item,
+							groupId: group.id,
+							groupTags: Array.isArray(group.tags) ? group.tags : [],
+						}));
+					})
+					: [];
 
 				console.log("API Response:", result);
 
@@ -132,15 +237,37 @@ export default function MachineTaggingPage() {
 						actualDurationMinutes = (now.getTime() - startTime.getTime()) / (1000 * 60);
 					}
 
+					const periodStartIso = normalizeIso(period.startTime);
+					const periodEndIso = normalizeIso(period.endTime ?? new Date().toISOString());
+					const matchedItem = groupItems.find((item) => {
+						const itemStart = normalizeIso(item.segmentStart);
+						const itemEnd = normalizeIso(item.segmentEnd);
+						return itemStart === periodStartIso && itemEnd === periodEndIso;
+					});
+					const reasonCode = matchedItem?.metadata?.reasonCode ?? matchedItem?.notes ?? "";
+				
+					const metadataText = serializeMetadata(matchedItem?.metadata);
+					const tagsText = Array.isArray(matchedItem?.groupTags) ? matchedItem.groupTags.join(", ") : "";
+
 					return {
 						id: `period-${index}`,
 						machineId: machineId,
 						date: currentDate,
+						rawStartTime: period.startTime,
+						rawEndTime: period.endTime ?? new Date().toISOString(),
 						startTime: convertUTCToIST(period.startTime),
 						endTime: period.isOngoing ? "now" : convertUTCToIST(period.endTime),
 						duration: `${Math.round(actualDurationMinutes)}m`,
 						type: period.status,
 						durationMinutes: actualDurationMinutes,
+						itemId: matchedItem?.id ?? null,
+						groupId: matchedItem?.groupId ?? null,
+						reason: reasonCode,
+		
+						category: matchedItem?.category ?? null,
+						notes: matchedItem?.notes ?? "",
+						metadataText,
+						tagsText,
 					};
 				});
 
@@ -213,6 +340,10 @@ export default function MachineTaggingPage() {
 
 		return isDateMatch && isSearchMatch;
 	});
+
+	const handleReasonSaved = (eventId: string, updates: Record<string, unknown>) => {
+		setEvents((prev) => prev.map((e) => (e.id === eventId ? { ...e, ...updates } : e)));
+	};
 
 	return (
 		<div className="flex flex-col min-h-screen bg-background-dashboard font-display pb-24 text-slate-800">
@@ -293,7 +424,16 @@ export default function MachineTaggingPage() {
 								<p className="text-sm font-bold text-red-400">{error}</p>
 							</div>
 						) : filteredEvents.length > 0 ? (
-							filteredEvents.map((event) => <EventCard key={event.id} event={event} machineId={machineId} />)
+							filteredEvents.map((event) => (
+								<EventCard
+									key={event.id}
+									event={event}
+									machineId={machineId}
+									clusterId={clusterId}
+									currentDate={currentDate}
+									onReasonSaved={handleReasonSaved}
+								/>
+							))
 						) : (
 							<div className="text-center py-12 flex flex-col items-center opacity-60">
 								<span className="material-symbols-outlined text-[48px] text-gray-300 mb-2">event_busy</span>
@@ -307,9 +447,25 @@ export default function MachineTaggingPage() {
 	);
 }
 
-function EventCard({ event, machineId }: { event: any; machineId: string }) {
-	const [isExpanded, setIsExpanded] = useState(false);
+function EventCard({
+	event,
+	machineId,
+	clusterId,
+	currentDate,
+	onReasonSaved,
+}: {
+	event: any;
+	machineId: string;
+	clusterId: string;
+	currentDate: string;
+	onReasonSaved: (eventId: string, updates: Record<string, unknown>) => void;
+}) {
+	const [isExpanded, setIsExpanded] = useState(true);
 	const [reason, setReason] = useState(event.reason || "");
+
+	useEffect(() => {
+		setReason(event.reason || "");
+	}, [event.reason]);
 
 	const eventType = event.type.toUpperCase();
 
@@ -373,6 +529,117 @@ function EventCard({ event, machineId }: { event: any; machineId: string }) {
 	const { containerClasses, iconName, iconBg, iconColor, statusElement } = getEventStyles(eventType);
 	const isLogged = !!event.reason;
 
+	const handleSave = async (e: React.MouseEvent<HTMLButtonElement>) => {
+		e.stopPropagation();
+		try {
+			if (!clusterId) throw new Error("Cluster ID is not configured.");
+			if (!machineId || machineId === "Unknown Machine") throw new Error("Invalid machine ID");
+			if (!reason) throw new Error("Please select a reason code.");
+			if (!event.rawStartTime || !event.rawEndTime) throw new Error("Missing event time range.");
+
+			const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate);
+			const account = {};
+			const category = getCategoryForReasonCode(reason);
+			const metadata = { reasonCode: reason };
+
+			const existingGroups = await readDeviceStateEventGroupsWithItems({
+				deviceId: machineId,
+				clusterId,
+				account,
+				query: {
+					rangeStart: fromDateUTC.toISOString(),
+					rangeEnd: toDateUTC.toISOString(),
+				},
+			});
+
+			const rangeStartMs = fromDateUTC.getTime();
+			const rangeEndMs = toDateUTC.getTime();
+			const matchingGroup = Array.isArray(existingGroups)
+				? existingGroups.find((group) => {
+						const startMs = group?.rangeStart ? new Date(group.rangeStart).getTime() : NaN;
+						const endMs = group?.rangeEnd ? new Date(group.rangeEnd).getTime() : NaN;
+						return startMs === rangeStartMs && endMs === rangeEndMs;
+					})
+				: null;
+
+			const itemPayload = {
+				segmentStart: event.rawStartTime,
+				segmentEnd: event.rawEndTime,
+				state: event.type,
+				category,
+				scopeType: "DEVICE_STATUS",
+				notes: undefined,
+				metadata,
+			};
+
+			let savedGroupId: string | null = matchingGroup?.id ?? null;
+			let savedItemId: string | null = event.itemId ?? null;
+			let savedGroup: any = null;
+
+			if (matchingGroup?.id) {
+				if (event.itemId) {
+					const updated = await updateDeviceStateEventGroupItems({
+						deviceId: machineId,
+						clusterId,
+						groupId: matchingGroup.id,
+						account,
+						items: [
+							{
+								id: event.itemId,
+								segmentStart: event.rawStartTime,
+								segmentEnd: event.rawEndTime,
+								category,
+								scopeType: "DEVICE_STATUS",
+								notes: undefined,
+								metadata,
+							},
+						],
+					});
+					savedGroup = updated;
+				} else {
+					const created = await createDeviceStateEventGroupItems({
+						deviceId: machineId,
+						clusterId,
+						groupId: matchingGroup.id,
+						account,
+						items: [itemPayload],
+					});
+					savedGroup = created;
+				}
+			} else {
+				const created = await createDeviceStateEventGroup({
+					deviceId: machineId,
+					clusterId,
+					account,
+					body: {
+						rangeStart: fromDateUTC.toISOString(),
+						rangeEnd: toDateUTC.toISOString(),
+						items: [itemPayload],
+					},
+				});
+				savedGroup = created;
+				savedGroupId = created?.id ?? null;
+			}
+
+			if (savedGroup?.Items && Array.isArray(savedGroup.Items)) {
+				const matched = savedGroup.Items.find((item: any) => {
+					return normalizeIso(item.segmentStart) === normalizeIso(event.rawStartTime) && normalizeIso(item.segmentEnd) === normalizeIso(event.rawEndTime);
+				});
+				savedItemId = matched?.id ?? savedItemId;
+			}
+
+			onReasonSaved(event.id, {
+				reason,
+				category,
+				itemId: savedItemId,
+				groupId: savedGroupId,
+			});
+			setIsExpanded(false);
+		} catch (err) {
+			console.error("Failed to save reason code:", err);
+		}
+	};
+
 	return (
 		<div
 			className={cn(
@@ -392,7 +659,7 @@ function EventCard({ event, machineId }: { event: any; machineId: string }) {
 				<div className="flex-1 min-w-0 flex flex-col justify-center">
 					<h3 className="text-sm font-bold font-display text-slate-800 truncate">
 						{eventType}
-						{isLogged ? <span className="font-normal text-gray-500"> • {event.reason}</span> : ""}
+						{/* {event.category ? <span className="ml-3 text-[10px] font-normal text-gray-500">{event.category}</span> : null} */}
 					</h3>
 					<p className="text-[10px] text-slate-500 font-medium truncate">
 						{event.startTime} - {event.endTime} • {event.duration}
@@ -436,7 +703,10 @@ function EventCard({ event, machineId }: { event: any; machineId: string }) {
 							>
 								CANCEL
 							</button>
-							<button className="px-4 py-1.5 bg-primary text-white text-xs font-bold rounded-lg shadow-sm hover:bg-primary/90 active:scale-95 transition-all">
+							<button
+								onClick={handleSave}
+								className="px-4 py-1.5 bg-primary text-white text-xs font-bold rounded-lg shadow-sm hover:bg-primary/90 active:scale-95 transition-all"
+							>
 								SAVE
 							</button>
 						</div>

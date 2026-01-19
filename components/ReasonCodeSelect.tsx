@@ -1,6 +1,7 @@
 "use client";
 
-import React, { useState, useRef, useEffect } from "react";
+import React, { useEffect, useRef, useState } from "react";
+
 import { cn } from "@/lib/utils";
 
 interface ReasonCodeSelectProps {
@@ -13,6 +14,51 @@ interface ReasonCodeSelectProps {
 const IDLE_CODES = ["Breakdown", "No Operator", "No Work / Material", "Tool Change", "Operator Break", "Machine Setup", "Quality Check"];
 
 const OFFLINE_CODES = ["Power Loss", "MCB Trip", "Sensor Failure", "Network Issue", "Emergency Stop"];
+
+const getCategoryForReasonCode = (reasonCode: string) => {
+	const normalized = reasonCode.trim();
+	if (IDLE_CODES.includes(normalized)) {
+		switch (normalized) {
+			case "Breakdown":
+				return "OUTAGE";
+			case "No Operator":
+				return "PRODUCTION_SETUP";
+			case "No Work / Material":
+				return "MATERIAL_LOADING";
+			case "Tool Change":
+				return "TOOL_CHANGE";
+			case "Operator Break":
+				return "PRODUCTION_SETUP";
+			case "Machine Setup":
+				return "EQUIPMENT_SETUP";
+			case "Quality Check":
+				return "QUALITY_CHECK";
+			default:
+				return "MAINTENANCE";
+		}
+	}
+
+	if (OFFLINE_CODES.includes(normalized)) {
+		switch (normalized) {
+			case "Power Loss":
+				return "POWER";
+			case "MCB Trip":
+				return "POWER";
+			case "Sensor Failure":
+				return "ANOMALY";
+			case "Network Issue":
+				return "CONNECTIVITY";
+			case "Emergency Stop":
+				return "SAFETY";
+			default:
+				return "OUTAGE";
+		}
+	}
+
+	return "OTHER";
+};
+
+const getDisplayLabel = (code: string) => `${code} - ${getCategoryForReasonCode(code)}`;
 
 export function ReasonCodeSelect({ value, onChange, eventType, className }: ReasonCodeSelectProps) {
 	const [isOpen, setIsOpen] = useState(false);
@@ -49,7 +95,9 @@ export function ReasonCodeSelect({ value, onChange, eventType, className }: Reas
 					isOpen && "border-primary ring-2 ring-primary/20",
 				)}
 			>
-				<span className={cn("truncate", !value && "text-gray-400 font-medium")}>{value || "Select a reason..."}</span>
+				<span className={cn("truncate", !value && "text-gray-400 font-medium")}>
+					{value ? getDisplayLabel(value) : "Select a reason..."}
+				</span>
 				<span
 					className={cn("material-symbols-outlined text-gray-400 !text-[18px] transition-transform duration-200", isOpen && "rotate-180")}
 				>
@@ -71,7 +119,7 @@ export function ReasonCodeSelect({ value, onChange, eventType, className }: Reas
 									value === code && "bg-primary/5 text-primary",
 								)}
 							>
-								{code}
+								{getDisplayLabel(code)}
 							</button>
 						))}
 					</div>

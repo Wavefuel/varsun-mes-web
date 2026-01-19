@@ -4,10 +4,18 @@ import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
-import Link from "next/link";
 import { ReasonCodeSelect } from "@/components/ReasonCodeSelect";
 import { useData } from "@/context/DataContext";
-import { fetchDeviceList } from "@/utils/scripts";
+import {
+	createDeviceStateEventGroup,
+	createDeviceStateEventGroupItems,
+	fetchDeviceList,
+	fetchDeviceStatusPeriods,
+	readDeviceStateEventGroupsWithItems,
+	updateDeviceStateEventGroup,
+	updateDeviceStateEventGroupItems,
+	DeviceStatusPeriod,
+} from "@/utils/scripts";
 import AppHeader from "@/components/AppHeader";
 import EmptyState from "@/components/EmptyState";
 import Loader from "@/components/Loader";
@@ -16,97 +24,81 @@ function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
 }
 
-const getContextTime = (timeStr: string, offsetMinutes: number) => {
-	if (!timeStr) return "";
-	const [hours, minutes] = timeStr.split(":").map(Number);
-	const date = new Date();
-	date.setHours(hours, minutes + offsetMinutes);
-	return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit", hour12: false });
+const IDLE_CODES = ["Breakdown", "No Operator", "No Work / Material", "Tool Change", "Operator Break", "Machine Setup", "Quality Check"];
+
+const OFFLINE_CODES = ["Power Loss", "MCB Trip", "Sensor Failure", "Network Issue", "Emergency Stop"];
+
+const getCategoryForReasonCode = (reasonCode: string) => {
+	const normalized = reasonCode.trim();
+	if (IDLE_CODES.includes(normalized)) {
+		switch (normalized) {
+			case "Breakdown":
+				return "OUTAGE";
+			case "No Operator":
+				return "PRODUCTION_SETUP";
+			case "No Work / Material":
+				return "MATERIAL_LOADING";
+			case "Tool Change":
+				return "TOOL_CHANGE";
+			case "Operator Break":
+				return "PRODUCTION_SETUP";
+			case "Machine Setup":
+				return "EQUIPMENT_SETUP";
+			case "Quality Check":
+				return "QUALITY_CHECK";
+			default:
+				return "MAINTENANCE";
+		}
+	}
+
+	if (OFFLINE_CODES.includes(normalized)) {
+		switch (normalized) {
+			case "Power Loss":
+				return "POWER";
+			case "MCB Trip":
+				return "POWER";
+			case "Sensor Failure":
+				return "ANOMALY";
+			case "Network Issue":
+				return "CONNECTIVITY";
+			case "Emergency Stop":
+				return "SAFETY";
+			default:
+				return "OUTAGE";
+		}
+	}
+
+	return "OTHER";
 };
 
-const getMockEventDetails = (eventId: string, machineId: string) => {
-	// This function simulates an API call or DB lookup
-	// It returns different data based on the ID to show dynamic functionality
+const buildUtcRangeFromIstDate = (dateStr: string) => {
+	const [year, month, day] = dateStr.split("-").map(Number);
+	const utcMidnight = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
+	const utcEndOfDay = Date.UTC(year, month - 1, day, 23, 59, 59, 999);
+	const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+	const fromDateUTC = new Date(utcMidnight - IST_OFFSET_MS);
+	const toDateUTC = new Date(utcEndOfDay - IST_OFFSET_MS);
+	return { fromDateUTC, toDateUTC };
+};
 
-	const baseDate = new Date().toISOString().split("T")[0]; // Today
+const normalizeIso = (value?: string | Date | null) => {
+	if (!value) return "";
+	const parsed = value instanceof Date ? value : new Date(value);
+	return Number.isNaN(parsed.getTime()) ? String(value) : parsed.toISOString();
+};
 
-	const mockDatabase: Record<string, any> = {
-		"ev-101": {
-			id: "ev-101",
-			title: "Unexpected Stop",
-			description: "Machine stopped without signal.",
-			startTime: "10:30",
-			endTime: "10:45",
-			date: baseDate,
-			duration: "15m",
-			reason: "", // Untagged
-			metadata: [],
-			tags: ["Urgent"],
-			type: "Untagged",
-		},
-		"ev-102": {
-			id: "ev-102",
-			title: "System Offline",
-			description: "Network connectivity lost detected.",
-			startTime: "08:00",
-			endTime: "08:20",
-			date: baseDate,
-			duration: "20m",
-			reason: "Sensor Failure",
-			metadata: [
-				{ key: "Error Code", value: "E-505" },
-				{ key: "Region", value: "North-1" },
-			],
-			tags: ["Maintenance", "Network"],
-			type: "Offline",
-		},
-		"ev-103": {
-			id: "ev-103",
-			title: "Tool Change Operation",
-			description: "Scheduled tool replacement for wear.",
-			startTime: "09:15",
-			endTime: "09:45",
-			date: baseDate,
-			duration: "30m",
-			reason: "No Operator", // Example mapping
-			metadata: [
-				{ key: "Operator", value: "S. Kumar" },
-				{ key: "Tool ID", value: "T-99" },
-			],
-			tags: ["Planned", "Shift-1"],
-			type: "Logged",
-		},
-		"ev-099": {
-			id: "ev-099",
-			title: "Maintenance Log",
-			description: "Preventative maintenance routine.",
-			startTime: "14:00",
-			endTime: "14:20",
-			date: "2025-01-01",
-			duration: "20m",
-			reason: "Breakdown",
-			metadata: [{ key: "Technician", value: "Mike R." }],
-			tags: ["History", "Maintenance"],
-			type: "Logged",
-		},
-	};
+const metadataToArray = (value: unknown) => {
+	if (!value || typeof value !== "object") return [] as Array<{ key: string; value: string }>;
+	return Object.entries(value as Record<string, unknown>)
+		.filter(([key]) => !["reasonCode", "category", "tags", "Tags"].includes(key))
+		.map(([key, val]) => ({ key, value: String(val) }));
+};
 
-	// Fallback if ID not found (New/Unknown event)
-	return (
-		mockDatabase[eventId] || {
-			id: eventId,
-			title: "New Detected Event",
-			description: "",
-			startTime: "12:00",
-			endTime: "12:15",
-			date: baseDate,
-			duration: "15m",
-			reason: "",
-			metadata: [{ key: "Machine", value: machineId }],
-			tags: [],
-			type: "Untagged",
-		}
-	);
+const metadataFromArray = (items: Array<{ key: string; value: string }>) => {
+	const entries = items
+		.map((item) => ({ key: item.key?.trim(), value: item.value?.trim() }))
+		.filter((item) => item.key);
+	return entries.length ? Object.fromEntries(entries.map((item) => [item.key as string, item.value ?? ""])) : undefined;
 };
 
 export default function EventGroupingPage() {
@@ -116,7 +108,7 @@ export default function EventGroupingPage() {
 	const machineId = params?.id && typeof params.id === "string" ? decodeURIComponent(params.id) : "Unknown Machine";
 	const eventId = params?.eventId && typeof params.eventId === "string" ? decodeURIComponent(params.eventId) : "unknown";
 
-	const { eventsDevices, setEventsDevices } = useData();
+	const { currentDate, eventsDevices, setEventsDevices } = useData();
 	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID ?? "";
 
 	// Fetch devices if not present
@@ -136,29 +128,109 @@ export default function EventGroupingPage() {
 	const [isError, setIsError] = useState(false);
 
 	// Form State
-	const [title, setTitle] = useState("");
-	const [description, setDescription] = useState("");
 	const [reason, setReason] = useState("");
 	const [metadata, setMetadata] = useState<{ key: string; value: string }[]>([]);
 	const [notes, setNotes] = useState("");
-	const [tags, setTags] = useState<string[]>([]);
-	const [newTag, setNewTag] = useState("");
+	const [tagsText, setTagsText] = useState("");
 	const [eventData, setEventData] = useState<any>(null);
 
 	// Initialize Data
 	useEffect(() => {
-		const data = getMockEventDetails(eventId, machineId);
-		setEventData(data);
+		const loadEvent = async () => {
+			try {
+				setLoading(true);
+				if (!lhtClusterId) throw new Error("Cluster ID is not configured.");
+				if (!machineId || machineId === "Unknown Machine") throw new Error("Invalid machine ID");
+				const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate);
+				const periods = await fetchDeviceStatusPeriods({
+					deviceId: machineId,
+					clusterId: lhtClusterId,
+					query: {
+						fromDate: fromDateUTC.toISOString(),
+						toDate: toDateUTC.toISOString(),
+						minDurationMinutes: 15,
+					},
+				});
 
-		// Populate Form
-		setTitle(data.title);
-		setDescription(data.description);
-		setReason(data.reason);
-		setMetadata(data.metadata && data.metadata.length > 0 ? data.metadata : [{ key: "", value: "" }]);
-		setTags(data.tags);
+				const account = {};
+				const groups = await readDeviceStateEventGroupsWithItems({
+					deviceId: machineId,
+					clusterId: lhtClusterId,
+					account,
+					query: {
+						rangeStart: fromDateUTC.toISOString(),
+						rangeEnd: toDateUTC.toISOString(),
+					},
+				});
 
-		setLoading(false);
-	}, [eventId, machineId]);
+				const groupItems = Array.isArray(groups)
+					? groups.flatMap((group) => {
+						const items = Array.isArray(group?.Items) ? group.Items : [];
+						return items.map((item) => ({
+							...item,
+							groupId: group.id,
+							groupTags: Array.isArray(group.tags) ? group.tags : [],
+						}));
+					})
+					: [];
+
+				const toIstTime = (utcDate: string) =>
+					new Date(utcDate).toLocaleString("en-US", {
+						timeZone: "Asia/Kolkata",
+						hour: "2-digit",
+						minute: "2-digit",
+						hour12: true,
+					});
+
+				const events = periods.data.map((period: DeviceStatusPeriod, index: number) => {
+					const periodStartIso = normalizeIso(period.startTime);
+					const periodEndIso = normalizeIso(period.endTime ?? new Date().toISOString());
+					const matchedItem = groupItems.find((item) => {
+						const itemStart = normalizeIso(item.segmentStart);
+						const itemEnd = normalizeIso(item.segmentEnd);
+						return itemStart === periodStartIso && itemEnd === periodEndIso;
+					});
+					const reasonCode = matchedItem?.metadata?.reasonCode ?? matchedItem?.notes ?? "";
+					const tagsValue = (matchedItem?.metadata?.Tags ?? matchedItem?.metadata?.tags ?? "") as string;
+					return {
+						id: `period-${index}`,
+						type: period.status,
+						rawStartTime: period.startTime,
+						rawEndTime: period.endTime ?? new Date().toISOString(),
+						startTime: toIstTime(period.startTime),
+						endTime: period.isOngoing ? "now" : toIstTime(period.endTime),
+						reason: reasonCode,
+						category: matchedItem?.category ?? null,
+						notes: matchedItem?.notes ?? "",
+						metadata: matchedItem?.metadata ?? null,
+						tags: tagsValue,
+						itemId: matchedItem?.id ?? null,
+						groupId: matchedItem?.groupId ?? null,
+					};
+				});
+
+				const found = events.find((evt) => evt.id === eventId);
+				if (!found) {
+					throw new Error("Event not found for selected day.");
+				}
+
+				setEventData(found);
+				setReason(found.reason || "");
+				setMetadata(metadataToArray(found.metadata).length ? metadataToArray(found.metadata) : [{ key: "", value: "" }]);
+				setTagsText(found.tags || "");
+				setNotes(found.notes || "");
+			} catch (err) {
+				console.error(err);
+				setIsError(true);
+			} finally {
+				setLoading(false);
+			}
+		};
+
+		if (machineId && lhtClusterId) {
+			loadEvent();
+		}
+	}, [eventId, machineId, lhtClusterId, currentDate]);
 
 	// Handlers
 	const handleAddMetadata = () => {
@@ -177,31 +249,125 @@ export default function EventGroupingPage() {
 		setMetadata(newMeta);
 	};
 
-	const handleAddTag = () => {
-		if (newTag.trim()) {
-			setTags([...tags, newTag.trim()]);
-			setNewTag("");
-		}
-	};
-
-	const handleRemoveTag = (tagToRemove: string) => {
-		setTags(tags.filter((t) => t !== tagToRemove));
-	};
-
-	const handleSave = (e: React.FormEvent) => {
+	const handleSave = async (e: React.FormEvent) => {
 		e.preventDefault();
-		// Here you would typically POST the data to your backend
-		console.log("Saving Event:", {
-			id: eventId,
-			machineId,
-			title,
-			description,
-			reason,
-			metadata,
-			tags,
-			notes,
-		});
-		router.back();
+		try {
+			if (!lhtClusterId) throw new Error("Cluster ID is not configured.");
+			if (!machineId || machineId === "Unknown Machine") throw new Error("Invalid machine ID");
+			if (!reason) throw new Error("Please select a reason code.");
+			if (!eventData?.rawStartTime || !eventData?.rawEndTime) throw new Error("Missing event time range.");
+
+			const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate);
+			const account = {};
+			const category = getCategoryForReasonCode(reason);
+			const metadataObj = metadataFromArray(metadata);
+			const metadataPayload = {
+				...(metadataObj ?? {}),
+				reasonCode: reason,
+				...(tagsText.trim() ? { Tags: tagsText.trim() } : {}),
+			};
+
+			const existingGroups = await readDeviceStateEventGroupsWithItems({
+				deviceId: machineId,
+				clusterId: lhtClusterId,
+				account,
+				query: {
+					rangeStart: fromDateUTC.toISOString(),
+					rangeEnd: toDateUTC.toISOString(),
+				},
+			});
+
+			const rangeStartMs = fromDateUTC.getTime();
+			const rangeEndMs = toDateUTC.getTime();
+			const matchingGroup = Array.isArray(existingGroups)
+				? existingGroups.find((group) => {
+						const startMs = group?.rangeStart ? new Date(group.rangeStart).getTime() : NaN;
+						const endMs = group?.rangeEnd ? new Date(group.rangeEnd).getTime() : NaN;
+						return startMs === rangeStartMs && endMs === rangeEndMs;
+					})
+				: null;
+
+			const itemPayload = {
+				segmentStart: eventData.rawStartTime,
+				segmentEnd: eventData.rawEndTime,
+				state: eventData.type,
+				category,
+				scopeType: "DEVICE_STATUS",
+				notes,
+				metadata: metadataPayload,
+			};
+
+			let savedGroupId: string | null = matchingGroup?.id ?? null;
+			let savedItemId: string | null = eventData.itemId ?? null;
+			let savedGroup: any = null;
+
+			if (matchingGroup?.id) {
+				if (eventData.itemId) {
+					const updated = await updateDeviceStateEventGroupItems({
+						deviceId: machineId,
+						clusterId: lhtClusterId,
+						groupId: matchingGroup.id,
+						account,
+						items: [
+							{
+								id: eventData.itemId,
+								segmentStart: eventData.rawStartTime,
+								segmentEnd: eventData.rawEndTime,
+								category,
+								scopeType: "DEVICE_STATUS",
+								notes,
+								metadata: metadataPayload,
+							},
+						],
+					});
+					savedGroup = updated;
+				} else {
+					const created = await createDeviceStateEventGroupItems({
+						deviceId: machineId,
+						clusterId: lhtClusterId,
+						groupId: matchingGroup.id,
+						account,
+						items: [itemPayload],
+					});
+					savedGroup = created;
+				}
+			} else {
+				const created = await createDeviceStateEventGroup({
+					deviceId: machineId,
+					clusterId: lhtClusterId,
+					account,
+					body: {
+						rangeStart: fromDateUTC.toISOString(),
+						rangeEnd: toDateUTC.toISOString(),
+						tags: tagsText.trim() ? tagsText.split(",").map((tag) => tag.trim()).filter(Boolean) : undefined,
+						items: [itemPayload],
+					},
+				});
+				savedGroup = created;
+				savedGroupId = created?.id ?? null;
+			}
+
+			if (savedGroup?.Items && Array.isArray(savedGroup.Items)) {
+				const matched = savedGroup.Items.find((item: any) => {
+					return normalizeIso(item.segmentStart) === normalizeIso(eventData.rawStartTime) && normalizeIso(item.segmentEnd) === normalizeIso(eventData.rawEndTime);
+				});
+				savedItemId = matched?.id ?? savedItemId;
+			}
+
+			setEventData({
+				...eventData,
+				reason,
+				category,
+				notes,
+				metadata: metadataPayload,
+				tags: tagsText,
+				itemId: savedItemId,
+				groupId: savedGroupId,
+			});
+			router.back();
+		} catch (error) {
+			console.error("Failed to save event details:", error);
+		}
 	};
 
 	const isDeviceMapLoaded = !lhtClusterId || eventsDevices.length > 0;
@@ -285,28 +451,7 @@ export default function EventGroupingPage() {
 
 						<form id="event-grouping-form" className="!p-4 !space-y-2" onSubmit={handleSave}>
 							{/* Title & Description */}
-							<div className="space-y-3">
-								<div className="space-y-1.5">
-									<label className="block text-[11px] font-bold text-gray-500 uppercase ml-1">Group Title</label>
-									<input
-										className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 text-xs font-bold text-gray-800 focus:ring-primary focus:border-primary transition-colors placeholder:text-gray-400 font-medium"
-										placeholder="Enter group title"
-										type="text"
-										value={title}
-										onChange={(e) => setTitle(e.target.value)}
-									/>
-								</div>
-								<div className="space-y-1.5">
-									<label className="block text-[11px] font-bold text-gray-500 uppercase ml-1">Description</label>
-									<textarea
-										className="w-full bg-gray-50 border border-gray-200 rounded-lg !p-3 text-xs font-bold text-gray-800 focus:ring-primary focus:border-primary transition-colors placeholder:text-gray-400 font-medium resize-none"
-										placeholder="Brief description"
-										rows={3}
-										value={description}
-										onChange={(e) => setDescription(e.target.value)}
-									/>
-								</div>
-							</div>
+						
 
 							{/* Times */}
 							<div className="grid grid-cols-2 !gap-3">
@@ -317,7 +462,7 @@ export default function EventGroupingPage() {
 											className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 text-xs font-bold text-gray-800 focus:ring-primary focus:border-primary"
 											readOnly
 											type="text"
-											value={`${eventData.startTime} AM`}
+											value={eventData.startTime}
 										/>
 										<span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none !text-base">
 											schedule
@@ -331,7 +476,7 @@ export default function EventGroupingPage() {
 											className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 text-xs font-bold text-gray-800 focus:ring-primary focus:border-primary"
 											readOnly
 											type="text"
-											value={`${eventData.endTime} AM`}
+											value={eventData.endTime}
 										/>
 										<span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 pointer-events-none !text-base">
 											schedule
@@ -344,6 +489,9 @@ export default function EventGroupingPage() {
 							<div className="space-y-1.5">
 								<label className="block text-[11px] font-bold text-gray-500 uppercase ml-1">Reason Code</label>
 								<ReasonCodeSelect value={reason} onChange={setReason} eventType={eventData.type} />
+								{reason ? (
+									<p className="text-[10px] font-semibold text-gray-600">{`${reason} - ${getCategoryForReasonCode(reason)}`}</p>
+								) : null}
 							</div>
 
 							{/* Metadata */}
@@ -388,39 +536,12 @@ export default function EventGroupingPage() {
 							{/* Tags */}
 							<div className="space-y-1.5 pt-1">
 								<label className="block text-[11px] font-bold text-gray-500 uppercase ml-1">Tags</label>
-								<div className="relative flex gap-2">
-									<input
-										className="flex-1 bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 text-xs font-medium text-gray-800 focus:ring-primary focus:border-primary placeholder:text-gray-400"
-										placeholder="Add new tag..."
-										value={newTag}
-										onChange={(e) => setNewTag(e.target.value)}
-										onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), handleAddTag())}
-									/>
-									<button
-										type="button"
-										onClick={handleAddTag}
-										className="bg-gray-100 hover:bg-gray-200 border border-gray-200 text-gray-600 font-bold text-xs px-3 rounded-lg shadow-sm transition-colors active:scale-95"
-									>
-										ADD
-									</button>
-								</div>
-								<div className="flex flex-wrap gap-2 mt-2">
-									{tags.map((tag) => (
-										<span
-											key={tag}
-											className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded bg-white border border-gray-200 text-[11px] font-bold text-gray-600 shadow-sm"
-										>
-											{tag}
-											<button
-												type="button"
-												onClick={() => handleRemoveTag(tag)}
-												className="hover:text-red-500 flex items-center text-gray-400 transition-colors"
-											>
-												<span className="material-symbols-outlined !text-[14px]">close</span>
-											</button>
-										</span>
-									))}
-								</div>
+								<input
+									className="w-full bg-gray-50 border border-gray-200 rounded-lg py-2 px-3 text-xs font-medium text-gray-800 focus:ring-primary focus:border-primary placeholder:text-gray-400"
+									placeholder="tag1, tag2"
+									value={tagsText}
+									onChange={(e) => setTagsText(e.target.value)}
+								/>
 							</div>
 
 							{/* Notes */}

@@ -1,5 +1,3 @@
-
-
 // Assuming these are imported from your API handler module
 import  { lightHouseAPIHandler }  from "./lightHouse"
 
@@ -810,6 +808,7 @@ export interface FetchDeviceStatusPeriodsData {
 	applicationId?: string;
 	query?: {
 		deviceStatus?: string;
+		reasonCode?: string;
 		fromDate?: Date | string;
 		toDate?: Date | string;
 		minDurationMinutes?: number;
@@ -879,6 +878,7 @@ export async function fetchDeviceStatusPeriods(data: FetchDeviceStatusPeriodsDat
 			{
 				params: {
 					...(data.query?.deviceStatus && { deviceStatus: data.query.deviceStatus }),
+					...(data.query?.reasonCode && { reasonCode: data.query.reasonCode }),
 					...(data.query?.fromDate && { fromDate: data.query.fromDate }),
 					...(data.query?.toDate && { toDate: data.query.toDate }),
 					...(data.query?.minDurationMinutes && { minDurationMinutes: data.query.minDurationMinutes }),
