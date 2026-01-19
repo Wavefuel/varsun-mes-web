@@ -15,6 +15,8 @@ function cn(...inputs: ClassValue[]) {
 interface CustomDatePickerProps {
 	value: string; // YYYY-MM-DD or HH:mm
 	onChange: (date: string) => void;
+	currentShift?: "Day" | "Night";
+	onShiftChange?: (shift: "Day" | "Night") => void;
 	className?: string; // Class for the wrapper
 	wrapperClassName?: string;
 	customInput?: React.ReactNode;
@@ -25,11 +27,13 @@ interface CustomDatePickerProps {
 	dateFormat?: string;
 }
 
-const portalRoot = typeof document !== "undefined" ? document.body : null;
+const portalId = "picker-portal";
 
 export default function CustomDatePicker({
 	value,
 	onChange,
+	currentShift,
+	onShiftChange,
 	className,
 	customInput,
 	disabled,
@@ -163,7 +167,8 @@ export default function CustomDatePicker({
 	}, [isOpen, showTimeSelectOnly]);
 
 	const renderTimePicker = () => {
-		if (!portalRoot) return null;
+		const root = typeof document !== "undefined" ? document.getElementById("time-picker-portal-root") : null;
+		if (!root) return null;
 		return createPortal(
 			<div
 				id="time-picker-portal"
@@ -241,7 +246,7 @@ export default function CustomDatePicker({
 					</div>
 				</div>
 			</div>,
-			portalRoot,
+			root,
 		);
 	};
 
@@ -263,7 +268,7 @@ export default function CustomDatePicker({
 	}
 
 	return (
-		<div className={cn("custom-datepicker-wrapper", className)}>
+		<div className={cn("custom-datepicker-wrapper relative z-50", className)}>
 			<DatePicker
 				selected={selectedDate}
 				onChange={handleChange}
@@ -277,7 +282,7 @@ export default function CustomDatePicker({
 				popperPlacement="bottom-start"
 				showPopperArrow={false}
 				calendarClassName="font-sans"
-				portalId="picker-portal"
+				portalId={portalId}
 				renderCustomHeader={({ date, decreaseMonth, increaseMonth, prevMonthButtonDisabled, nextMonthButtonDisabled }) => (
 					<div className="flex items-center justify-between px-2 py-1">
 						<button
@@ -299,7 +304,34 @@ export default function CustomDatePicker({
 						</button>
 					</div>
 				)}
-			/>
+			>
+				{onShiftChange && currentShift && (
+					<div className="p-2 border-t border-gray-100 bg-gray-50/50 flex flex-col gap-2 w-full">
+						<div className="flex bg-white border border-gray-200 rounded-lg p-0.5 w-full">
+							<button
+								type="button"
+								onClick={() => onShiftChange("Day")}
+								className={cn(
+									"flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-widest transition-all",
+									currentShift === "Day" ? "bg-primary text-white shadow-sm" : "text-gray-400 hover:text-primary",
+								)}
+							>
+								Day
+							</button>
+							<button
+								type="button"
+								onClick={() => onShiftChange("Night")}
+								className={cn(
+									"flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-widest transition-all",
+									currentShift === "Night" ? "bg-primary text-white shadow-sm" : "text-gray-400 hover:text-primary",
+								)}
+							>
+								Night
+							</button>
+						</div>
+					</div>
+				)}
+			</DatePicker>
 		</div>
 	);
 }

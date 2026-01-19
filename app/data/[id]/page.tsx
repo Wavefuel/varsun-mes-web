@@ -2,8 +2,7 @@
 
 import React, { useState, useEffect } from "react";
 import { useRouter, useParams } from "next/navigation";
-import { clsx, type ClassValue } from "clsx";
-import { twMerge } from "tailwind-merge";
+import { clsx } from "clsx";
 import { ReasonCodeSelect } from "@/components/ReasonCodeSelect";
 import EmptyState from "@/components/EmptyState";
 import { cn } from "@/lib/utils";
@@ -21,11 +20,33 @@ import {
 	readDeviceStateEventGroupsWithItems,
 	updateDeviceStateEventGroupItems,
 	DeviceStatusPeriod,
+	DeviceStateEventItemInput,
+	DeviceStateEventItemUpdateInput,
 } from "@/utils/scripts";
 
 const IDLE_CODES = ["Breakdown", "No Operator", "No Work / Material", "Tool Change", "Operator Break", "Machine Setup", "Quality Check"];
 
 const OFFLINE_CODES = ["Power Loss", "MCB Trip", "Sensor Failure", "Network Issue", "Emergency Stop"];
+
+interface DowntimeEvent {
+	id: string;
+	machineId: string;
+	date: string;
+	rawStartTime: string;
+	rawEndTime: string;
+	startTime: string;
+	endTime: string;
+	duration: string;
+	type: string;
+	durationMinutes: number;
+	itemId: string | null;
+	groupId: string | null;
+	reason: string;
+	category: string | null;
+	notes: string;
+	metadataText: string;
+	tagsText: string;
+}
 
 const getCategoryForReasonCode = (reasonCode: string) => {
 	const normalized = reasonCode.trim();
@@ -70,13 +91,36 @@ const getCategoryForReasonCode = (reasonCode: string) => {
 	return "OTHER";
 };
 
-const buildUtcRangeFromIstDate = (dateStr: string) => {
+const buildUtcRangeFromIstDate = (dateStr: string, currentShift: string) => {
 	const [year, month, day] = dateStr.split("-").map(Number);
-	const utcMidnight = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
-	const utcEndOfDay = Date.UTC(year, month - 1, day, 23, 59, 59, 999);
 	const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-	const fromDateUTC = new Date(utcMidnight - IST_OFFSET_MS);
-	const toDateUTC = new Date(utcEndOfDay - IST_OFFSET_MS);
+
+	let fromDateUTC: Date;
+	let toDateUTC: Date;
+
+	if (currentShift === "Day") {
+		// Day Shift: 8 AM to 8 PM IST
+		const start = Date.UTC(year, month - 1, day, 8, 0, 0, 0);
+		const end = Date.UTC(year, month - 1, day, 20, 0, 0, 0);
+		fromDateUTC = new Date(start - IST_OFFSET_MS);
+		toDateUTC = new Date(end - IST_OFFSET_MS);
+	} else {
+		// Night Shift: 8 PM to 8 AM next day IST
+		const start = Date.UTC(year, month - 1, day, 20, 0, 0, 0);
+		const end = Date.UTC(year, month - 1, day + 1, 8, 0, 0, 0);
+		fromDateUTC = new Date(start - IST_OFFSET_MS);
+		toDateUTC = new Date(end - IST_OFFSET_MS);
+	}
+
+	console.log("Date Conversion Debug:", {
+		currentDateString: dateStr,
+		parsedValues: { year, month, day },
+		fromDateUTC: fromDateUTC.toISOString(),
+		toDateUTC: toDateUTC.toISOString(),
+		expectedISTStart: `${dateStr} ${currentShift === "Day" ? "08:00" : "20:00"} IST`,
+		expectedISTEnd: `${dateStr} ${currentShift === "Day" ? "20:00" : "08:00 (next day)"} IST`,
+	});
+
 	return { fromDateUTC, toDateUTC };
 };
 
@@ -122,7 +166,7 @@ const parseTags = (input: string) =>
 export default function MachineTaggingPage() {
 	const router = useRouter();
 	const params = useParams();
-	const { currentDate, setCurrentDate, eventsDevices, setEventsDevices } = useData();
+	const { currentDate, setCurrentDate, eventsDevices, setEventsDevices, currentShift } = useData();
 	// decodeURIComponent in case ID has spaces or special chars
 	const machineId = typeof params.id === "string" ? decodeURIComponent(params.id) : "Unknown Machine";
 
@@ -153,7 +197,7 @@ export default function MachineTaggingPage() {
 
 	const [searchQuery, setSearchQuery] = useState("");
 	const [showFilters, setShowFilters] = useState(false);
-	const [events, setEvents] = useState<any[]>([]);
+	const [events, setEvents] = useState<DowntimeEvent[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
@@ -180,8 +224,7 @@ export default function MachineTaggingPage() {
 				// IST is UTC+5:30, so to get UTC time from IST, subtract 5.5 hours:
 				// IST 2026-01-17 00:00:00 = UTC 2026-01-16 18:30:00
 				// IST 2026-01-17 23:59:59 = UTC 2026-01-17 18:29:59
-				const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate);
-
+				const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate, currentShift);
 
 				const result = await fetchDeviceStatusPeriods({
 					deviceId: machineId,
@@ -204,14 +247,14 @@ export default function MachineTaggingPage() {
 					},
 				});
 				const groupItems = Array.isArray(groups)
-					? groups.flatMap((group) => {
-						const items = Array.isArray(group?.Items) ? group.Items : [];
-						return items.map((item) => ({
-							...item,
-							groupId: group.id,
-							groupTags: Array.isArray(group.tags) ? group.tags : [],
-						}));
-					})
+					? (groups as any[]).flatMap((group: any) => {
+							const items = Array.isArray(group?.Items) ? group.Items : [];
+							return items.map((item: any) => ({
+								...item,
+								groupId: group.id,
+								groupTags: Array.isArray(group.tags) ? group.tags : [],
+							}));
+						})
 					: [];
 
 				console.log("API Response:", result);
@@ -239,13 +282,13 @@ export default function MachineTaggingPage() {
 
 					const periodStartIso = normalizeIso(period.startTime);
 					const periodEndIso = normalizeIso(period.endTime ?? new Date().toISOString());
-					const matchedItem = groupItems.find((item) => {
+					const matchedItem = groupItems.find((item: any) => {
 						const itemStart = normalizeIso(item.segmentStart);
 						const itemEnd = normalizeIso(item.segmentEnd);
 						return itemStart === periodStartIso && itemEnd === periodEndIso;
 					});
 					const reasonCode = matchedItem?.metadata?.reasonCode ?? matchedItem?.notes ?? "";
-				
+
 					const metadataText = serializeMetadata(matchedItem?.metadata);
 					const tagsText = Array.isArray(matchedItem?.groupTags) ? matchedItem.groupTags.join(", ") : "";
 
@@ -263,7 +306,7 @@ export default function MachineTaggingPage() {
 						itemId: matchedItem?.id ?? null,
 						groupId: matchedItem?.groupId ?? null,
 						reason: reasonCode,
-		
+
 						category: matchedItem?.category ?? null,
 						notes: matchedItem?.notes ?? "",
 						metadataText,
@@ -283,7 +326,7 @@ export default function MachineTaggingPage() {
 		if (machineId && clusterId) {
 			fetchPeriods();
 		}
-	}, [machineId, currentDate, clusterId]);
+	}, [machineId, currentDate, clusterId, currentShift]);
 
 	// Calculate stats from events
 	const stats = React.useMemo(() => {
@@ -431,6 +474,7 @@ export default function MachineTaggingPage() {
 									machineId={machineId}
 									clusterId={clusterId}
 									currentDate={currentDate}
+									currentShift={currentShift}
 									onReasonSaved={handleReasonSaved}
 								/>
 							))
@@ -452,12 +496,14 @@ function EventCard({
 	machineId,
 	clusterId,
 	currentDate,
+	currentShift,
 	onReasonSaved,
 }: {
-	event: any;
+	event: DowntimeEvent;
 	machineId: string;
 	clusterId: string;
 	currentDate: string;
+	currentShift: string;
 	onReasonSaved: (eventId: string, updates: Record<string, unknown>) => void;
 }) {
 	const [isExpanded, setIsExpanded] = useState(true);
@@ -527,7 +573,6 @@ function EventCard({
 	};
 
 	const { containerClasses, iconName, iconBg, iconColor, statusElement } = getEventStyles(eventType);
-	const isLogged = !!event.reason;
 
 	const handleSave = async (e: React.MouseEvent<HTMLButtonElement>) => {
 		e.stopPropagation();
@@ -537,7 +582,7 @@ function EventCard({
 			if (!reason) throw new Error("Please select a reason code.");
 			if (!event.rawStartTime || !event.rawEndTime) throw new Error("Missing event time range.");
 
-			const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate);
+			const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate, currentShift);
 			const account = {};
 			const category = getCategoryForReasonCode(reason);
 			const metadata = { reasonCode: reason };
@@ -562,12 +607,12 @@ function EventCard({
 					})
 				: null;
 
-			const itemPayload = {
+			const itemPayload: DeviceStateEventItemInput = {
 				segmentStart: event.rawStartTime,
 				segmentEnd: event.rawEndTime,
 				state: event.type,
 				category,
-				scopeType: "DEVICE_STATUS",
+				scopeType: "DEVICE_STATUS" as const,
 				notes: undefined,
 				metadata,
 			};
@@ -592,7 +637,7 @@ function EventCard({
 								scopeType: "DEVICE_STATUS",
 								notes: undefined,
 								metadata,
-							},
+							} as DeviceStateEventItemUpdateInput,
 						],
 					});
 					savedGroup = updated;
@@ -623,7 +668,10 @@ function EventCard({
 
 			if (savedGroup?.Items && Array.isArray(savedGroup.Items)) {
 				const matched = savedGroup.Items.find((item: any) => {
-					return normalizeIso(item.segmentStart) === normalizeIso(event.rawStartTime) && normalizeIso(item.segmentEnd) === normalizeIso(event.rawEndTime);
+					return (
+						normalizeIso(item.segmentStart) === normalizeIso(event.rawStartTime) &&
+						normalizeIso(item.segmentEnd) === normalizeIso(event.rawEndTime)
+					);
 				});
 				savedItemId = matched?.id ?? savedItemId;
 			}
@@ -678,7 +726,7 @@ function EventCard({
 
 			{/* Expanded Content (Form) */}
 			{isExpanded && (
-				<div className="bg-white border-t border-gray-100 px-4 py-2 space-y-2 animate-in slide-in-from-top-2 duration-200">
+				<div className="bg-white border-t border-gray-100 px-4 py-2 space-y-2 animate-in slide-in-from-top-2 duration-200 rounded-b-xl">
 					{/* Reason Code */}
 					<div className="space-y-1.5">
 						<label className="text-[10px] font-bold text-gray-800 uppercase tracking-wider">Reason Code</label>

@@ -47,7 +47,7 @@ function StockEntryForm() {
 	const queryDeviceId = searchParams?.get("deviceId") ?? "";
 	const queryDate = searchParams?.get("date") ?? "";
 
-	const { addOrder, getOrderById, updateOrder, globalDevices, setGlobalDevices, globalAssignments, setGlobalAssignments } = useData();
+	const { addOrder, getOrderById, updateOrder, globalDevices, setGlobalDevices, globalAssignments, setGlobalAssignments, currentShift } = useData();
 
 	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID ?? "";
 	const lhtAccountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID ?? "";
@@ -132,14 +132,26 @@ function StockEntryForm() {
 
 	const deviceLabel = (device?: DeviceSummary) => device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
 
-	const toIsoDayRange = (dateStr: string) => {
-		const base = new Date(dateStr);
-		if (Number.isNaN(base.getTime())) return null;
-		const start = new Date(base);
-		start.setHours(0, 0, 0, 0);
-		const end = new Date(base);
-		end.setHours(23, 59, 59, 999);
-		return { rangeStart: start.toISOString(), rangeEnd: end.toISOString() };
+	const toIsoShiftRange = (dateStr: string, shift: string) => {
+		const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+		const [year, month, day] = dateStr.split("-").map(Number);
+		if (!year || !month || !day) return null;
+
+		if (shift.includes("Night") || shift === "Night") {
+			const start = Date.UTC(year, month - 1, day, 20, 0, 0, 0);
+			const end = Date.UTC(year, month - 1, day + 1, 8, 0, 0, 0);
+			return {
+				rangeStart: new Date(start - IST_OFFSET_MS).toISOString(),
+				rangeEnd: new Date(end - IST_OFFSET_MS).toISOString(),
+			};
+		} else {
+			const start = Date.UTC(year, month - 1, day, 8, 0, 0, 0);
+			const end = Date.UTC(year, month - 1, day, 20, 0, 0, 0);
+			return {
+				rangeStart: new Date(start - IST_OFFSET_MS).toISOString(),
+				rangeEnd: new Date(end - IST_OFFSET_MS).toISOString(),
+			};
+		}
 	};
 
 	const toTimeHHMM = (value?: string | null) => {
@@ -231,7 +243,8 @@ function StockEntryForm() {
 
 				// Fetch remote data to get IDs / refresh details
 				const selectedDate = queryDate || orderFromContext?.date || new Date().toISOString().split("T")[0];
-				const range = toIsoDayRange(selectedDate);
+				const shiftToUse = orderFromContext?.shift || currentShift;
+				const range = toIsoShiftRange(selectedDate, shiftToUse);
 				if (!range) {
 					throw new Error("Invalid date");
 				}
@@ -287,7 +300,7 @@ function StockEntryForm() {
 					machine: deviceLabel(foundDevice) || deviceId || "Unknown Device",
 					operator: String(metadata.operatorCode ?? ""),
 					date: selectedDate,
-					shift: "Day Shift (S1)",
+					shift: shiftToUse.includes("Night") ? "Night Shift (S2)" : "Day Shift (S1)",
 					startTime: toTimeHHMM(item?.segmentStart ?? null) || "",
 					endTime: toTimeHHMM(item?.segmentEnd ?? null) || "",
 					code: String(metadata.operatorCode ?? ""),
@@ -423,7 +436,10 @@ function StockEntryForm() {
 				}
 
 				// Build range from group or from order date
-				const range = groupRangeStart && groupRangeEnd ? { rangeStart: groupRangeStart, rangeEnd: groupRangeEnd } : toIsoDayRange(order.date);
+				const range =
+					groupRangeStart && groupRangeEnd
+						? { rangeStart: groupRangeStart, rangeEnd: groupRangeEnd }
+						: toIsoShiftRange(order.date, order.shift);
 
 				// For new groups (PLANNED), ensure range covers the segment end
 				if (itemCategory === "PLANNED" && range && segmentEnd && new Date(segmentEnd) > new Date(range.rangeEnd)) {

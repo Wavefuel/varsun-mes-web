@@ -27,7 +27,7 @@ function getPseudoRandom(seed: string) {
 }
 
 export default function EventsPage() {
-	const { currentDate, eventsDevices, setEventsDevices } = useData();
+	const { currentDate, eventsDevices, setEventsDevices, currentShift } = useData();
 	const [searchQuery, setSearchQuery] = useState("");
 	const [showFilters, setShowFilters] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
@@ -57,9 +57,9 @@ export default function EventsPage() {
 		return name.toLowerCase().includes(query) || m.id.toLowerCase().includes(query) || (m.serialNumber || "").toLowerCase().includes(query);
 	});
 
-	// Helper to generate dynamic status based on machine + date
-	const getMachineStatus = (machineId: string, date: string) => {
-		const rand = getPseudoRandom(machineId + date);
+	// Helper to generate dynamic status based on machine + date + shift
+	const getMachineStatus = (machineId: string, date: string, shift: string) => {
+		const rand = getPseudoRandom(machineId + date + shift);
 		const untaggedCount = rand % 25; // 0 to 24
 
 		// Simulate different states based on random seed
@@ -124,7 +124,7 @@ export default function EventsPage() {
 				) : (
 					<>
 						{filteredMachines.map((machine) => {
-							const { untaggedCount, status, signal } = getMachineStatus(machine.id, currentDate);
+							const { untaggedCount, status, signal } = getMachineStatus(machine.id, currentDate, currentShift);
 							const isOnline = status !== "Offline";
 
 							return (

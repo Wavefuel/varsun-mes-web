@@ -20,8 +20,17 @@ function cn(...inputs: ClassValue[]) {
 }
 
 export default function StockPage() {
-	const { orders, currentDate, globalAssignments, setGlobalAssignments, globalDevices, setGlobalDevices, globalDataDate, setGlobalDataDate } =
-		useData();
+	const {
+		orders,
+		currentDate,
+		globalAssignments,
+		setGlobalAssignments,
+		globalDevices,
+		setGlobalDevices,
+		globalDataDate,
+		setGlobalDataDate,
+		currentShift,
+	} = useData();
 	const [searchQuery, setSearchQuery] = useState("");
 	const [filterStatus, setFilterStatus] = useState<"All" | "Planned" | "Completed">("All");
 	const [showFilters, setShowFilters] = useState(false);
@@ -91,8 +100,8 @@ export default function StockPage() {
 			return;
 		}
 
-		// Check if data is already loaded for this date
-		if (globalDataDate === currentDate && globalAssignments) {
+		// Check if data is already loaded for this date and shift
+		if (globalDataDate === `${currentDate}:${currentShift}` && globalAssignments) {
 			return;
 		}
 
@@ -100,18 +109,30 @@ export default function StockPage() {
 
 		setIsLoading(true);
 
-		const base = new Date(currentDate);
-		const start = new Date(base);
-		start.setHours(0, 0, 0, 0);
-		const end = new Date(base);
-		end.setDate(end.getDate() + 1);
-		end.setHours(23, 59, 59, 999);
+		// Calculate shift-based range
+		let start, end;
+		const [y, m, day] = currentDate.split("-").map(Number);
+		const istOffset = 5.5 * 3600 * 1000;
+
+		if (currentShift === "Day") {
+			// Day Shift: 8AM to 8PM
+			const dayStartUTC = Date.UTC(y, m - 1, day, 8, 0, 0) - istOffset;
+			const dayEndUTC = Date.UTC(y, m - 1, day, 20, 0, 0) - istOffset;
+			start = new Date(dayStartUTC).toISOString();
+			end = new Date(dayEndUTC).toISOString();
+		} else {
+			// Night Shift: 8PM to 8AM Next Day
+			const nightStartUTC = Date.UTC(y, m - 1, day, 20, 0, 0) - istOffset;
+			const nightEndUTC = Date.UTC(y, m - 1, day + 1, 8, 0, 0) - istOffset;
+			start = new Date(nightStartUTC).toISOString();
+			end = new Date(nightEndUTC).toISOString();
+		}
 
 		readDeviceStateEventGroupsWithItemsByCluster({
 			clusterId: lhtClusterId,
 			applicationId: lhtApplicationId,
 			account: { id: lhtAccountId },
-			query: { rangeStart: start.toISOString(), rangeEnd: end.toISOString() },
+			query: { rangeStart: start, rangeEnd: end },
 		})
 			.then((groupsUnknown: unknown) => {
 				type ApiEventItem = {
@@ -131,9 +152,7 @@ export default function StockPage() {
 
 				const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
 				const mapped: Order[] = groups.flatMap((group) => {
-					const rangeStart = typeof group?.rangeStart === "string" ? group.rangeStart : null;
-					const groupLocalDate = rangeStart ? toLocalYYYYMMDD(rangeStart) : currentDate;
-					if (groupLocalDate !== currentDate) return [];
+					const groupShift = currentShift === "Day" ? "Day Shift (S1)" : "Night Shift (S2)";
 
 					const deviceId = typeof group?.deviceId === "string" ? group.deviceId : "";
 					const machineName = (() => {
@@ -169,7 +188,7 @@ export default function StockPage() {
 								machine: machineName,
 								operator: String(metadata.operatorCode ?? ""),
 								date: currentDate,
-								shift: "Day Shift (S1)",
+								shift: groupShift,
 								startTime,
 								endTime,
 								code: String(metadata.operatorCode ?? ""),
@@ -186,7 +205,7 @@ export default function StockPage() {
 					});
 				});
 				setGlobalAssignments(mapped as any); // Casting since Order vs Assignment might have slight diffs but they are compatible
-				setGlobalDataDate(currentDate);
+				setGlobalDataDate(`${currentDate}:${currentShift}`);
 			})
 			.catch((error) => {
 				console.error(error);
@@ -206,6 +225,7 @@ export default function StockPage() {
 		setGlobalDataDate,
 		globalDataDate,
 		isError,
+		currentShift,
 	]);
 
 	const sourceOrders = useMemo(
@@ -215,7 +235,8 @@ export default function StockPage() {
 
 	// Filter Logic
 	const filteredOrders = sourceOrders.filter((order) => {
-		if (order.date !== currentDate) return false;
+		// API already filters by shift range, but we keep it for consistency
+
 		const displayWorkOrder = (order as Order & { workOrder?: string }).workOrder || order.id;
 
 		const matchesSearch =
@@ -292,7 +313,7 @@ export default function StockPage() {
 					</div>
 				) : isLoading ||
 				  (lighthouseEnabled && globalAssignments === null) ||
-				  globalDataDate !== currentDate ||
+				  globalDataDate !== `${currentDate}:${currentShift}` ||
 				  (lighthouseEnabled && !globalDevices.length) ? (
 					<div className="flex-1 flex flex-col justify-center select-none min-h-[50vh]">
 						<Loader />

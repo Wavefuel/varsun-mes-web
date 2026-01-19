@@ -49,6 +49,9 @@ export default function RootLayout({
 						<AppSplash />
 						<div className="pb-20">{children}</div>
 						<BottomNav />
+						{/* Portal targets for pickers to ensure they appear on top */}
+						<div id="picker-portal" />
+						<div id="time-picker-portal-root" />
 					</div>
 				</DataProvider>
 			</body>

@@ -35,7 +35,6 @@ type ApiEventGroup = {
 	title?: string | null;
 	Items?: ApiEventItem[] | null;
 };
-
 export default function PlanningPage() {
 	const {
 		orders,
@@ -47,6 +46,7 @@ export default function PlanningPage() {
 		setGlobalDevices,
 		globalDataDate,
 		setGlobalDataDate,
+		currentShift,
 	} = useData();
 
 	const [searchQuery, setSearchQuery] = useState("");
@@ -136,9 +136,8 @@ export default function PlanningPage() {
 
 		if (isError) return;
 
-		// Check if data is already loaded for this date
-		// Check if data is already loaded for this date
-		if (globalDataDate === currentDate && globalAssignments) {
+		// Check if data is already loaded for this date and shift
+		if (globalDataDate === `${currentDate}:${currentShift}` && globalAssignments) {
 			return;
 		}
 
@@ -148,12 +147,24 @@ export default function PlanningPage() {
 
 		setIsLoading(true);
 
-		const base = new Date(currentDate);
-		const start = new Date(base);
-		start.setHours(0, 0, 0, 0);
-		const end = new Date(base);
-		end.setDate(end.getDate() + 1);
-		end.setHours(23, 59, 59, 999);
+		// Calculate shift-based range
+		let start, end;
+		const [y, m, day] = currentDate.split("-").map(Number);
+		const istOffset = 5.5 * 3600 * 1000;
+
+		if (currentShift === "Day") {
+			// Day Shift: 8AM to 8PM
+			const dayStartUTC = Date.UTC(y, m - 1, day, 8, 0, 0) - istOffset;
+			const dayEndUTC = Date.UTC(y, m - 1, day, 20, 0, 0) - istOffset;
+			start = new Date(dayStartUTC).toISOString();
+			end = new Date(dayEndUTC).toISOString();
+		} else {
+			// Night Shift: 8PM to 8AM Next Day
+			const nightStartUTC = Date.UTC(y, m - 1, day, 20, 0, 0) - istOffset;
+			const nightEndUTC = Date.UTC(y, m - 1, day + 1, 8, 0, 0) - istOffset;
+			start = new Date(nightStartUTC).toISOString();
+			end = new Date(nightEndUTC).toISOString();
+		}
 
 		let cancelled = false;
 
@@ -161,7 +172,7 @@ export default function PlanningPage() {
 			clusterId: lhtClusterId,
 			applicationId: lhtApplicationId,
 			account: { id: lhtAccountId },
-			query: { rangeStart: start.toISOString(), rangeEnd: end.toISOString() },
+			query: { rangeStart: start, rangeEnd: end },
 			// Fetch ALL devices now, filter locally if needed.
 			deviceId: undefined,
 		})
@@ -169,16 +180,7 @@ export default function PlanningPage() {
 				if (cancelled) return;
 				const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
 				const mapped: Assignment[] = groups.flatMap((group) => {
-					// ... mapping logic remains the same ...
-					const rangeStart = typeof group?.rangeStart === "string" ? group.rangeStart : null;
-					const rangeEnd = typeof group?.rangeEnd === "string" ? group.rangeEnd : null;
-					const groupLocalDate = rangeStart ? toLocalYYYYMMDD(rangeStart) : currentDate;
-					if (groupLocalDate !== currentDate) return [];
-
-					const shift =
-						rangeStart && rangeEnd && new Date(rangeStart).toDateString() !== new Date(rangeEnd).toDateString()
-							? "Night Shift (S2)"
-							: "Day Shift (S1)";
+					const groupShift = currentShift === "Day" ? "Day Shift (S1)" : "Night Shift (S2)";
 
 					const deviceId = typeof group?.deviceId === "string" ? group.deviceId : "";
 					const machineName = (() => {
@@ -215,7 +217,7 @@ export default function PlanningPage() {
 								machine: machineName,
 								operator: String(metadata.operatorCode ?? ""),
 								date: currentDate,
-								shift,
+								shift: groupShift,
 								startTime: startTimeValue,
 								endTime: endTimeValue,
 								code: String(metadata.operatorCode ?? ""),
@@ -233,7 +235,7 @@ export default function PlanningPage() {
 				});
 
 				setGlobalAssignments(mapped);
-				setGlobalDataDate(currentDate);
+				setGlobalDataDate(`${currentDate}:${currentShift}`);
 			})
 			.catch((error) => {
 				if (cancelled) return;
@@ -261,6 +263,7 @@ export default function PlanningPage() {
 		setGlobalAssignments,
 		globalDataDate,
 		setGlobalDataDate,
+		currentShift,
 	]);
 
 	const sourceAssignments: Assignment[] = useMemo(() => {
@@ -270,7 +273,9 @@ export default function PlanningPage() {
 
 	// Filter Logic
 	const filteredAssignments = sourceAssignments.filter((item) => {
-		if (item.date !== currentDate) return false;
+		// If using shift-based fetching, we don't strictly need to filter by date anymore as API does it,
+		// but let's keep it consistent.
+
 		// Planning list should hide completed items.
 		if ((item.status as string) === "COMPLETED") return false;
 
@@ -418,7 +423,7 @@ export default function PlanningPage() {
 					</div>
 				) : isLoading ||
 				  (lighthouseEnabled && globalAssignments === null) ||
-				  globalDataDate !== currentDate ||
+				  globalDataDate !== `${currentDate}:${currentShift}` ||
 				  (lighthouseEnabled && !globalDevices.length) ? (
 					<div className="flex-1 flex flex-col justify-center">
 						<Loader />

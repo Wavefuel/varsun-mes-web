@@ -41,6 +41,7 @@ export default function Home() {
 		setGlobalDevices,
 		globalDataDate,
 		setGlobalDataDate,
+		currentShift,
 	} = useData();
 
 	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID;
@@ -76,19 +77,32 @@ export default function Home() {
 	React.useEffect(() => {
 		if (!lighthouseEnabled || !lhtClusterId || !lhtAccountId) return;
 		if (lighthouseEnabled && !globalDevices.length) return;
-		if (globalDataDate === currentDate && globalAssignments) {
+		if (globalDataDate === `${currentDate}:${currentShift}` && globalAssignments) {
 			setIsLoading(false);
 			return;
 		}
 
 		setIsLoading(true);
 
-		const base = new Date(currentDate);
-		const start = new Date(base);
-		start.setHours(0, 0, 0, 0);
-		const end = new Date(base);
-		end.setDate(end.getDate() + 1);
-		end.setHours(23, 59, 59, 999);
+		const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+		const [year, month, day] = currentDate.split("-").map(Number);
+
+		let startRange: string;
+		let endRange: string;
+
+		if (currentShift === "Day") {
+			// Day Shift: 8 AM to 8 PM IST
+			const start = Date.UTC(year, month - 1, day, 8, 0, 0, 0);
+			const end = Date.UTC(year, month - 1, day, 20, 0, 0, 0);
+			startRange = new Date(start - IST_OFFSET_MS).toISOString();
+			endRange = new Date(end - IST_OFFSET_MS).toISOString();
+		} else {
+			// Night Shift: 8 PM to 8 AM next day IST
+			const start = Date.UTC(year, month - 1, day, 20, 0, 0, 0);
+			const end = Date.UTC(year, month - 1, day + 1, 8, 0, 0, 0);
+			startRange = new Date(start - IST_OFFSET_MS).toISOString();
+			endRange = new Date(end - IST_OFFSET_MS).toISOString();
+		}
 
 		const toLocalYYYYMMDD = (iso: string) => {
 			const d = getISTDate(iso);
@@ -105,15 +119,13 @@ export default function Home() {
 			clusterId: lhtClusterId,
 			applicationId: lhtApplicationId,
 			account: { id: lhtAccountId },
-			query: { rangeStart: start.toISOString(), rangeEnd: end.toISOString() },
+			query: { rangeStart: startRange, rangeEnd: endRange },
 		})
 			.then((groupsUnknown: unknown) => {
 				if (cancelled) return;
 				const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
 				const mapped: any[] = groups.flatMap((group) => {
-					const rangeStart = typeof group?.rangeStart === "string" ? group.rangeStart : null;
-					const groupLocalDate = rangeStart ? toLocalYYYYMMDD(rangeStart) : currentDate;
-					if (groupLocalDate !== currentDate) return [];
+					const groupShift = currentShift === "Day" ? "Day Shift (S1)" : "Night Shift (S2)";
 
 					const deviceId = typeof group?.deviceId === "string" ? group.deviceId : "";
 					const machineName = (() => {
@@ -146,7 +158,7 @@ export default function Home() {
 								machine: machineName,
 								operator: String(metadata.operatorCode ?? ""),
 								date: currentDate,
-								shift: "Day Shift (S1)",
+								shift: groupShift,
 								startTime,
 								endTime,
 								code: String(metadata.operatorCode ?? ""),
@@ -163,7 +175,7 @@ export default function Home() {
 					});
 				});
 				setGlobalAssignments(mapped);
-				setGlobalDataDate(currentDate);
+				setGlobalDataDate(`${currentDate}:${currentShift}`);
 			})
 			.catch((error) => {
 				if (cancelled) return;
@@ -189,6 +201,7 @@ export default function Home() {
 		setGlobalAssignments,
 		setGlobalDataDate,
 		globalDataDate,
+		currentShift,
 	]);
 
 	// Metrics Logic

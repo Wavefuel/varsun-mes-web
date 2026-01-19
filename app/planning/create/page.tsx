@@ -37,6 +37,7 @@ function AssignmentForm() {
 		updateOrder,
 		globalDevices,
 		setGlobalDevices,
+		currentShift,
 	} = useData();
 
 	const orderId = searchParams.get("id");
@@ -57,7 +58,7 @@ function AssignmentForm() {
 	const [machine, setMachine] = useState("CNC-042 (Alpha)");
 	const [operator, setOperator] = useState("");
 	const [date, setDate] = useState(() => queryDate || currentDate);
-	const [shift, setShift] = useState("Day Shift (S1)");
+	const [shift, setShift] = useState(() => (currentShift === "Day" ? "Day Shift (S1)" : "Night Shift (S2)"));
 	const [startTime, setStartTime] = useState("08:00");
 	const [endTime, setEndTime] = useState("20:00");
 	const [code, setCode] = useState("");
@@ -140,9 +141,13 @@ function AssignmentForm() {
 	};
 
 	const findLocalGroupId = () => {
-		if (!globalAssignments || globalDataDate !== date) return undefined;
+		if (!globalAssignments || globalDataDate !== `${date}:${currentShift}`) return undefined;
 		const match = globalAssignments.find(
-			(item) => item.lhtDeviceId === selectedDeviceId && item.shift === shift && item.date === date && item.lhtGroupId,
+			(item) =>
+				item.lhtDeviceId === selectedDeviceId &&
+				(currentShift === "Day" ? item.shift === "Day Shift (S1)" : item.shift === "Night Shift (S2)") &&
+				item.date === date &&
+				item.lhtGroupId,
 		);
 		if (!match?.lhtGroupId) return undefined;
 		return match.lhtGroupId;
@@ -160,8 +165,22 @@ function AssignmentForm() {
 			try {
 				const selectedDate = queryDate || date || currentDate;
 
+				type ApiEventItem = {
+					id?: string;
+					category?: string | null;
+					segmentStart?: string | null;
+					segmentEnd?: string | null;
+					metadata?: Record<string, unknown> | null;
+				};
+				type ApiEventGroup = {
+					id?: string;
+					deviceId?: string;
+					rangeStart?: string | null;
+					rangeEnd?: string | null;
+					Items?: ApiEventItem[] | null;
+				};
+
 				// 1. Fetch Devices (Always needed)
-				// We fetch this first so we can resolve device labels/IDs for the assignment.
 				let deviceList = devices;
 				if (deviceList.length === 0) {
 					deviceList = await fetchDeviceList({ clusterId: lhtClusterId });
@@ -171,105 +190,92 @@ function AssignmentForm() {
 				}
 
 				// 2. Fetch Assignments if missing (needed for Planned Queue)
-				if (globalDataDate !== selectedDate || !globalAssignments) {
-					const range = toIsoDayRange(selectedDate);
-					if (range) {
-						const groupsUnknown = await readDeviceStateEventGroupsWithItemsByCluster({
-							clusterId: lhtClusterId,
-							applicationId: lhtApplicationId,
-							account: { id: lhtAccountId },
-							query: { rangeStart: range.rangeStart, rangeEnd: range.rangeEnd },
-							deviceId: undefined,
+				if (globalDataDate !== `${selectedDate}:${currentShift}` || !globalAssignments) {
+					// Calculate shift-based range
+					const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+					const [yPart, mPart, dPart] = selectedDate.split("-").map(Number);
+					let startRange, endRange;
+
+					if (currentShift === "Day") {
+						startRange = new Date(Date.UTC(yPart, mPart - 1, dPart, 8, 0, 0, 0) - IST_OFFSET_MS).toISOString();
+						endRange = new Date(Date.UTC(yPart, mPart - 1, dPart, 20, 0, 0, 0) - IST_OFFSET_MS).toISOString();
+					} else {
+						startRange = new Date(Date.UTC(yPart, mPart - 1, dPart, 20, 0, 0, 0) - IST_OFFSET_MS).toISOString();
+						endRange = new Date(Date.UTC(yPart, mPart - 1, dPart + 1, 8, 0, 0, 0) - IST_OFFSET_MS).toISOString();
+					}
+
+					const groupsUnknown = await readDeviceStateEventGroupsWithItemsByCluster({
+						clusterId: lhtClusterId,
+						applicationId: lhtApplicationId,
+						account: { id: lhtAccountId },
+						query: { rangeStart: startRange, rangeEnd: endRange },
+						deviceId: undefined,
+					});
+
+					const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
+					const mapped: Assignment[] = groups.flatMap((group) => {
+						const groupShift = currentShift === "Day" ? "Day Shift (S1)" : "Night Shift (S2)";
+
+						const deviceId = typeof group?.deviceId === "string" ? group.deviceId : "";
+						const machineName = (() => {
+							if (!deviceId) return "Unknown Device";
+							const dev = deviceList.find((d: DeviceSummary) => d.id === deviceId);
+							return dev ? deviceLabel(dev) : deviceId;
+						})();
+
+						const items = Array.isArray(group?.Items) ? group.Items : [];
+						return items.flatMap((item) => {
+							const metadata = item?.metadata ?? {};
+							const wo = String(metadata.workOrder ?? "");
+							if (!wo) return [];
+
+							const startTimeValue = toTimeHHMM(item?.segmentStart ?? null);
+							const endTimeValue = toTimeHHMM(item?.segmentEnd ?? null);
+							const category = typeof item?.category === "string" ? String(item.category).toUpperCase() : "";
+							const status: Assignment["status"] = category === "COMPLETED" ? "COMPLETED" : "PLANNED";
+
+							const rawOp = metadata.opNumber ?? "0";
+							const op = Array.isArray(rawOp) ? rawOp.map(String) : [String(rawOp)];
+
+							return [
+								{
+									id: String(group?.id ?? wo),
+									workOrder: wo,
+									partNumber: String(metadata.partNumber ?? ""),
+									machine: machineName,
+									operator: String(metadata.operatorCode ?? ""),
+									date: selectedDate,
+									shift: groupShift,
+									startTime: startTimeValue,
+									endTime: endTimeValue,
+									code: String(metadata.operatorCode ?? ""),
+									opNumber: op,
+									batch: Number(metadata.opBatchQty ?? 0),
+									estPart: String(metadata.estPartAdd ?? ""),
+									target: Number(metadata.opBatchQty ?? 0),
+									status,
+									lhtDeviceId: deviceId || undefined,
+									lhtGroupId: String(group?.id ?? ""),
+									lhtItemId: String(item?.id ?? ""),
+								},
+							];
 						});
+					});
 
-						type ApiEventItem = {
-							id?: string;
-							category?: string | null;
-							segmentStart?: string | null;
-							segmentEnd?: string | null;
-							metadata?: Record<string, unknown> | null;
-						};
-						type ApiEventGroup = {
-							id?: string;
-							deviceId?: string;
-							rangeStart?: string | null;
-							rangeEnd?: string | null;
-							Items?: ApiEventItem[] | null;
-						};
-
-						const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
-						const mapped: Assignment[] = groups.flatMap((group) => {
-							const rangeStart = typeof group?.rangeStart === "string" ? group.rangeStart : null;
-							const rangeEnd = typeof group?.rangeEnd === "string" ? group.rangeEnd : null;
-							const shift =
-								rangeStart && rangeEnd && new Date(rangeStart).toDateString() !== new Date(rangeEnd).toDateString()
-									? "Night Shift (S2)"
-									: "Day Shift (S1)";
-
-							const deviceId = typeof group?.deviceId === "string" ? group.deviceId : "";
-							const machineName = (() => {
-								if (!deviceId) return "Unknown Device";
-								const dev = deviceList.find((d) => d.id === deviceId);
-								return dev ? deviceLabel(dev) : deviceId;
-							})();
-
-							const items = Array.isArray(group?.Items) ? group.Items : [];
-							return items.flatMap((item) => {
-								const metadata = item?.metadata ?? {};
-								const wo = String(metadata.workOrder ?? "");
-								if (!wo) return [];
-
-								const startTimeValue = toTimeHHMM(item?.segmentStart ?? null);
-								const endTimeValue = toTimeHHMM(item?.segmentEnd ?? null);
-								const category = typeof item?.category === "string" ? String(item.category).toUpperCase() : "";
-								const status: Assignment["status"] = category === "COMPLETED" ? "COMPLETED" : "PLANNED";
-
-								const rawOp = metadata.opNumber ?? "0";
-								const op = Array.isArray(rawOp) ? rawOp.map(String) : [String(rawOp)];
-
-								return [
-									{
-										id: String(group?.id ?? wo),
-										workOrder: wo,
-										partNumber: String(metadata.partNumber ?? ""),
-										machine: machineName,
-										operator: String(metadata.operatorCode ?? ""),
-										date: selectedDate,
-										shift,
-										startTime: startTimeValue,
-										endTime: endTimeValue,
-										code: String(metadata.operatorCode ?? ""),
-										opNumber: op,
-										batch: Number(metadata.opBatchQty ?? 0),
-										estPart: String(metadata.estPartAdd ?? ""),
-										target: Number(metadata.opBatchQty ?? 0),
-										status,
-										lhtDeviceId: deviceId || undefined,
-										lhtGroupId: String(group?.id ?? ""),
-										lhtItemId: String(item?.id ?? ""),
-									},
-								];
-							});
-						});
-
-						if (!cancelled) {
-							setGlobalAssignments(mapped);
-							setGlobalDataDate(selectedDate);
-						}
+					if (!cancelled) {
+						setGlobalAssignments(mapped);
+						setGlobalDataDate(`${selectedDate}:${currentShift}`);
 					}
 				}
 
 				// 3. Handle Create Mode (Default Selection) vs Edit Mode (Load Order)
 				if (!isEditMode || !orderId) {
 					// --- CREATE MODE ---
-					// Set default device selection if none selected
 					if (deviceList.length > 0) {
-						// Prefer explicit query deviceId (when coming from planning list).
-						const preferred = queryDeviceId && queryDeviceId !== "ALL" ? deviceList.find((d) => d.id === queryDeviceId) : undefined;
+						const preferred =
+							queryDeviceId && queryDeviceId !== "ALL" ? deviceList.find((d: DeviceSummary) => d.id === queryDeviceId) : undefined;
 						const pick = preferred ?? deviceList[0];
 
-						// Only set if we haven't already selected one (or if we want to force query param adherence)
-						// Since this effect runs on mount, taking the query param is correct.
 						if (pick) {
 							setSelectedDeviceId((prev) => prev || pick.id);
 							setMachine((prev) => (prev === "CNC-042 (Alpha)" && pick.id !== "CNC-042 (Alpha)" ? deviceLabel(pick) : prev));
@@ -280,7 +286,6 @@ function AssignmentForm() {
 				}
 
 				// --- EDIT MODE ---
-				// 1. Try finding in loaded assignments context first (Live Data)
 				const cached = globalAssignments?.find((p) => p.id === orderId || p.lhtGroupId === orderId);
 				if (cached) {
 					setMachine(cached.machine);
@@ -312,25 +317,22 @@ function AssignmentForm() {
 					return;
 				}
 
-				// 2. Try fetching local legacy storage (Offline/Local)
-				const existing = getOrderById(orderId);
-				if (existing) {
-					setMachine(existing.machine);
-					setOperator(existing.operator);
-					setDate(existing.date);
-					setShift(existing.shift);
-					setStartTime(existing.startTime);
-					setEndTime(existing.endTime);
-					setCode(existing.code || "");
-					setPartNumber(existing.partNumber);
-					setWorkOrderId(existing.id);
-					// Handle type conversion if existing data is mixed
-					// @ts-ignore - opNumber might be number in legacy data
-					const op = existing.opNumber;
+				const legacyExisting = getOrderById(orderId);
+				if (legacyExisting) {
+					setMachine(legacyExisting.machine);
+					setOperator(legacyExisting.operator);
+					setDate(legacyExisting.date);
+					setShift(legacyExisting.shift);
+					setStartTime(legacyExisting.startTime);
+					setEndTime(legacyExisting.endTime);
+					setCode(legacyExisting.code || "");
+					setPartNumber(legacyExisting.partNumber);
+					setWorkOrderId(legacyExisting.id);
+					const op = legacyExisting.opNumber;
 					setOpNumber(Array.isArray(op) ? op : []);
-					setBatch(existing.batch || 450);
+					setBatch(legacyExisting.batch || 450);
 
-					const parsedEst = existing.estPart || "1.5m";
+					const parsedEst = legacyExisting.estPart || "1.5m";
 					if (parsedEst.endsWith("h")) {
 						setEstUnit("hr");
 						setEstTime(parsedEst.replace(/h$/, ""));
@@ -339,44 +341,36 @@ function AssignmentForm() {
 						setEstTime(parsedEst.replace(/m$/, ""));
 					}
 
-					if (existing.lhtDeviceId) setSelectedDeviceId(existing.lhtDeviceId);
+					if (legacyExisting.lhtDeviceId) setSelectedDeviceId(legacyExisting.lhtDeviceId);
 					setIsLoading(false);
 					return;
 				}
 
 				// API fallback
-				const range = toIsoDayRange(selectedDate);
-				if (!range) {
-					throw new Error("Invalid date");
+				const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+				const [yFall, mFall, dFall] = selectedDate.split("-").map(Number);
+				let startRange, endRange;
+				if (currentShift === "Day") {
+					startRange = new Date(Date.UTC(yFall, mFall - 1, dFall, 8, 0, 0, 0) - IST_OFFSET_MS).toISOString();
+					endRange = new Date(Date.UTC(yFall, mFall - 1, dFall, 20, 0, 0, 0) - IST_OFFSET_MS).toISOString();
+				} else {
+					startRange = new Date(Date.UTC(yFall, mFall - 1, dFall, 20, 0, 0, 0) - IST_OFFSET_MS).toISOString();
+					endRange = new Date(Date.UTC(yFall, mFall - 1, dFall + 1, 8, 0, 0, 0) - IST_OFFSET_MS).toISOString();
 				}
 
-				const groupsUnknown = await readDeviceStateEventGroupsWithItemsByCluster({
+				const groupsUnknownFallback = await readDeviceStateEventGroupsWithItemsByCluster({
 					clusterId: lhtClusterId,
 					applicationId: lhtApplicationId,
 					account: { id: lhtAccountId },
-					query: { rangeStart: range.rangeStart, rangeEnd: range.rangeEnd },
+					query: { rangeStart: startRange, rangeEnd: endRange },
 					deviceId: queryDeviceId && queryDeviceId !== "ALL" ? queryDeviceId : undefined,
 				});
 
-				type ApiEventItem = {
-					id?: string;
-					segmentStart?: string | null;
-					segmentEnd?: string | null;
-					metadata?: Record<string, unknown> | null;
-				};
-				type ApiEventGroup = {
-					id?: string;
-					deviceId?: string;
-					rangeStart?: string | null;
-					rangeEnd?: string | null;
-					Items?: ApiEventItem[] | null;
-				};
-
-				const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
+				const groupsFall: ApiEventGroup[] = Array.isArray(groupsUnknownFallback) ? (groupsUnknownFallback as ApiEventGroup[]) : [];
 				const foundGroup =
-					groups.find((g) => String(g?.id ?? "") === orderId) ??
-					groups.find((g) =>
-						(Array.isArray(g?.Items) ? g.Items : []).some((entry) => {
+					groupsFall.find((g) => String(g?.id ?? "") === orderId) ??
+					groupsFall.find((g) =>
+						(Array.isArray(g?.Items) ? g.Items : []).some((entry: ApiEventItem) => {
 							const md = entry?.metadata as Record<string, unknown> | undefined;
 							return String(md?.workOrder ?? "") === orderId;
 						}),
@@ -394,19 +388,19 @@ function AssignmentForm() {
 				setEventGroupId(String(foundGroup.id ?? ""));
 
 				const foundDeviceId = String(foundGroup.deviceId ?? "");
-				const foundDevice = deviceList.find((d) => d.id === foundDeviceId);
+				const foundDevice = deviceList.find((d: DeviceSummary) => d.id === foundDeviceId);
 				const label = foundDevice ? deviceLabel(foundDevice) : foundDeviceId || "Unknown Device";
 
 				const rs = typeof foundGroup.rangeStart === "string" ? new Date(foundGroup.rangeStart) : null;
 				const re = typeof foundGroup.rangeEnd === "string" ? new Date(foundGroup.rangeEnd) : null;
 				const isNight = rs && re && rs.toDateString() !== re.toDateString();
 
-				const m = metadata as Record<string, unknown>;
-				const workOrder = String(m.workOrder ?? "");
-				const pn = String(m.partNumber ?? "");
-				const oc = String(m.operatorCode ?? "");
-				const b = Number(m.opBatchQty ?? 450);
-				const ep = String(m.estPartAdd ?? "1.5m");
+				const metaDataObj = metadata as Record<string, unknown>;
+				const workOrder = String(metaDataObj.workOrder ?? "");
+				const pn = String(metaDataObj.partNumber ?? "");
+				const oc = String(metaDataObj.operatorCode ?? "");
+				const b = Number(metaDataObj.opBatchQty ?? 450);
+				const ep = String(metaDataObj.estPartAdd ?? "1.5m");
 
 				if (cancelled) return;
 				setSelectedDeviceId(foundDeviceId);
@@ -456,6 +450,7 @@ function AssignmentForm() {
 		getOrderById,
 		router,
 		currentDate, // used as fallback for date
+		currentShift,
 	]);
 
 	const handleSave = async () => {
@@ -743,7 +738,7 @@ function AssignmentForm() {
 				);
 				return [assignment, ...filtered];
 			});
-			setGlobalDataDate(date);
+			setGlobalDataDate(`${date}:${currentShift}`);
 		}
 
 		// Store locally keyed by Work Order id.

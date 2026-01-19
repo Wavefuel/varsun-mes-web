@@ -3,8 +3,28 @@
 	border-radius: 12px !important;
 	box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1) !important;
 	border: 1px solid #f1f5f9 !important;
-	padding: 2px !important;
+	padding: 0 !important;
 	background-color: #fff !important;
+	overflow: hidden !important;
+	display: flex !important;
+	flex-direction: column !important;
+	min-width: 200px !important;
+	width: auto !important;
+}
+
+.react-datepicker__month-container {
+	padding: 4px !important;
+	float: none !important;
+	width: 100% !important;
+}
+
+.react-datepicker-popper {
+	z-index: 10000 !important;
+	padding-top: 8px !important; /* Add gap between button and calendar */
+}
+
+.react-datepicker__portal {
+	z-index: 10001 !important;
 }
 
 .react-datepicker-wrapper {

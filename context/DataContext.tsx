@@ -12,6 +12,8 @@ interface DataContextType {
 	deleteOrder: (id: string) => void;
 	currentDate: string;
 	setCurrentDate: (date: string) => void;
+	currentShift: "Day" | "Night";
+	setCurrentShift: (shift: "Day" | "Night") => void;
 	planningAssignments: Assignment[] | null;
 	setPlanningAssignments: React.Dispatch<React.SetStateAction<Assignment[] | null>>;
 	planningDevices: DeviceSummary[];
@@ -44,6 +46,7 @@ const DataContext = createContext<DataContextType | undefined>(undefined);
 export function DataProvider({ children }: { children: React.ReactNode }) {
 	const [orders, setOrders] = useState<Order[]>([]);
 	const [currentDate, setCurrentDate] = useState(new Date().toISOString().split("T")[0]);
+	const [currentShift, setCurrentShift] = useState<"Day" | "Night">("Day");
 	const [planningAssignments, setPlanningAssignments] = useState<Assignment[] | null>(null);
 	const [planningDevices, setPlanningDevices] = useState<DeviceSummary[]>([]);
 	const [planningDataDate, setPlanningDataDate] = useState<string | null>(null);
@@ -104,6 +107,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 				deleteOrder,
 				currentDate,
 				setCurrentDate,
+				currentShift,
+				setCurrentShift,
 				planningAssignments,
 				setPlanningAssignments,
 				planningDevices,
