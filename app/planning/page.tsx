@@ -13,7 +13,13 @@ import Loader from "@/components/Loader";
 import Select from "@/components/ui/Select";
 import { useData } from "@/context/DataContext";
 import type { Order, Assignment } from "@/lib/types";
-import { deleteDeviceStateEventGroupItems, fetchDeviceList, readDeviceStateEventGroupsWithItemsByCluster, type DeviceSummary } from "@/utils/scripts";
+import {
+	deleteDeviceStateEventGroupItems,
+	deleteDeviceStateEventGroupItemsMany,
+	fetchDeviceList,
+	readDeviceStateEventGroupsWithItemsByCluster,
+	type DeviceSummary,
+} from "@/utils/scripts";
 
 function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
@@ -304,14 +310,22 @@ export default function PlanningPage() {
 			if (lighthouseEnabled) {
 				const selected = filteredAssignments.filter((a) => selectedIds.includes(selectionKey(a)));
 				const deletions = selected.filter((a) => a.lhtDeviceId && a.lhtGroupId && a.lhtItemId);
-				for (const entry of deletions) {
-					await deleteDeviceStateEventGroupItems({
-						deviceId: entry.lhtDeviceId!,
-						groupId: entry.lhtGroupId!,
+				// Group by deviceId for efficient batch deletion
+				const deletionsByDevice = deletions.reduce((acc, curr) => {
+					if (!acc[curr.lhtDeviceId!]) {
+						acc[curr.lhtDeviceId!] = [];
+					}
+					acc[curr.lhtDeviceId!].push(curr.lhtItemId!);
+					return acc;
+				}, {} as Record<string, string[]>);
+
+				for (const [deviceId, itemIds] of Object.entries(deletionsByDevice)) {
+					await deleteDeviceStateEventGroupItemsMany({
+						deviceId,
 						clusterId: lhtClusterId!,
 						applicationId: lhtApplicationId!,
 						account: { id: lhtAccountId! },
-						itemIds: [entry.lhtItemId!],
+						itemIds,
 					});
 				}
 				toast.success(`Deleted ${deletions.length} items`);
@@ -422,9 +436,9 @@ export default function PlanningPage() {
 						/>
 					</div>
 				) : isLoading ||
-				  (lighthouseEnabled && globalAssignments === null) ||
-				  globalDataDate !== `${currentDate}:${currentShift}` ||
-				  (lighthouseEnabled && !globalDevices.length) ? (
+					(lighthouseEnabled && globalAssignments === null) ||
+					globalDataDate !== `${currentDate}:${currentShift}` ||
+					(lighthouseEnabled && !globalDevices.length) ? (
 					<div className="flex-1 flex flex-col justify-center">
 						<Loader />
 					</div>

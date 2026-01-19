@@ -1,5 +1,5 @@
 // Assuming these are imported from your API handler module
-import  { lightHouseAPIHandler }  from "./lightHouse"
+import { lightHouseAPIHandler } from "./lightHouse"
 
 export type JsonValue =
 	| string
@@ -106,9 +106,9 @@ export async function createDeviceStateEventGroup(data: CreateDeviceStateEventGr
 				? buildDayRange(data.body.date)
 				: data.body.rangeStart && data.body.rangeEnd
 					? {
-							rangeStart: formatRangeValue(data.body.rangeStart),
-							rangeEnd: formatRangeValue(data.body.rangeEnd),
-						}
+						rangeStart: formatRangeValue(data.body.rangeStart),
+						rangeEnd: formatRangeValue(data.body.rangeEnd),
+					}
 					: null;
 		if (!range) {
 			throw new Error("Invalid Input, rangeStart/rangeEnd or date is required.");
@@ -150,7 +150,7 @@ export async function createDeviceStateEventGroup(data: CreateDeviceStateEventGr
 				tags: data.body.tags,
 				items: normalizedItems,
 			}
-			
+
 		);
 
 		return response.data?.data;
@@ -403,10 +403,10 @@ export async function updateDeviceStateEventGroup(data: UpdateDeviceStateEventGr
 				group: data.body.group,
 				items: data.body.items
 					? {
-							create: Array.isArray(data.body.items.create) ? data.body.items.create.map(normalizeCreateItemPayload) : undefined,
-							update: Array.isArray(data.body.items.update) ? data.body.items.update.map(normalizeUpdateItemPayload) : undefined,
-							delete: Array.isArray(data.body.items.delete) ? data.body.items.delete : undefined,
-						}
+						create: Array.isArray(data.body.items.create) ? data.body.items.create.map(normalizeCreateItemPayload) : undefined,
+						update: Array.isArray(data.body.items.update) ? data.body.items.update.map(normalizeUpdateItemPayload) : undefined,
+						delete: Array.isArray(data.body.items.delete) ? data.body.items.delete : undefined,
+					}
 					: undefined,
 			},
 			{
@@ -524,7 +524,7 @@ interface DeleteDeviceStateEventGroupItemsData extends UpdateDeviceStateEventGro
  */
 export async function deleteDeviceStateEventGroupItems(data: DeleteDeviceStateEventGroupItemsData) {
 	try {
-	    if (!data.deviceId) throw new Error("Invalid Input, deviceId is required.");
+		if (!data.deviceId) throw new Error("Invalid Input, deviceId is required.");
 		if (!data.clusterId) throw new Error("Invalid Input, clusterId is required.");
 		if (!data.groupId) throw new Error("Invalid Input, groupId is required.");
 		if (!data.account) throw new Error("Invalid Input, account is required.");
@@ -541,6 +541,49 @@ export async function deleteDeviceStateEventGroupItems(data: DeleteDeviceStateEv
 				items: { delete: data.itemIds },
 			},
 			{
+				headers: {
+					"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
+				},
+			}
+		);
+
+		return response.data?.data;
+	} catch (error) {
+		throw error;
+	}
+}
+
+
+interface DeleteDeviceStateEventGroupItemsManyData {
+	deviceId: string;
+	clusterId: string;
+	applicationId?: string;
+	account: Account;
+	itemIds: string[];
+}
+
+/**
+ * Deletes multiple items from any Device State Event Group.
+ *
+ * @param data - The data required to delete items
+ * @returns The deletion result
+ */
+export async function deleteDeviceStateEventGroupItemsMany(data: DeleteDeviceStateEventGroupItemsManyData) {
+	try {
+		if (!data.deviceId) throw new Error("Invalid Input, deviceId is required.");
+		if (!data.clusterId) throw new Error("Invalid Input, clusterId is required.");
+		if (!data.account) throw new Error("Invalid Input, account is required.");
+		if (!data.itemIds || data.itemIds.length === 0) {
+			throw new Error("Invalid Input, itemIds array is required and cannot be empty.");
+		}
+
+		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
+		const deviceStateEventsUrl = `${data.clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
+
+		const response = await lightHouseAPIHandler.delete(
+			`${deviceStateEventsUrl}/groups/items/delete/many`,
+			{
+				data: { itemIds: data.itemIds },
 				headers: {
 					"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
 				},
@@ -640,7 +683,7 @@ interface ReadDeviceStateEventGroupsWithItemsData {
 export async function readDeviceStateEventGroupsWithItems(data: ReadDeviceStateEventGroupsWithItemsData) {
 	try {
 		if (!data.deviceId) {
-		   		throw new Error("Invalid Input, deviceId is required.");
+			throw new Error("Invalid Input, deviceId is required.");
 		}
 		if (!data.clusterId) {
 			throw new Error("Invalid Input, clusterId is required.");
@@ -663,7 +706,7 @@ export async function readDeviceStateEventGroupsWithItems(data: ReadDeviceStateE
 					rangeEnd: data.query.rangeEnd,
 				},
 			}
-		);	
+		);
 
 		return response.data?.data;
 	} catch (error) {
@@ -737,16 +780,16 @@ export async function readDeviceStateEventItemsByDate(data: ReadDeviceStateEvent
 
 	const items = Array.isArray(groups)
 		? (groups as unknown[]).flatMap((groupUnknown) => {
-				const group = (groupUnknown && typeof groupUnknown === "object" ? (groupUnknown as Record<string, unknown>) : {}) as Record<string, unknown>;
-				const groupItems = Array.isArray(group?.Items) ? (group.Items as unknown[]) : [];
-				const groupId = group.id;
-				const groupTitle = group.title;
-				return groupItems.map((itemUnknown) => ({
-					...(itemUnknown && typeof itemUnknown === "object" ? (itemUnknown as Record<string, unknown>) : {}),
-					groupId,
-					groupTitle,
-				}));
-			})
+			const group = (groupUnknown && typeof groupUnknown === "object" ? (groupUnknown as Record<string, unknown>) : {}) as Record<string, unknown>;
+			const groupItems = Array.isArray(group?.Items) ? (group.Items as unknown[]) : [];
+			const groupId = group.id;
+			const groupTitle = group.title;
+			return groupItems.map((itemUnknown) => ({
+				...(itemUnknown && typeof itemUnknown === "object" ? (itemUnknown as Record<string, unknown>) : {}),
+				groupId,
+				groupTitle,
+			}));
+		})
 		: [];
 
 	return items;
@@ -780,7 +823,7 @@ export async function fetchDeviceList(data: FetchDeviceListData): Promise<Device
 			{
 				where: {
 					clusterId: data.clusterId,
-					
+
 				},
 				select: {
 					id: true,
