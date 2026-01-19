@@ -228,7 +228,7 @@ export default function PlanningPage() {
 								workOrder,
 								partNumber: String(metadata.partNumber ?? ""),
 								machine: machineName,
-								operator: String(metadata.operatorCode ?? ""),
+								operator: String(metadata.operatorName ?? metadata.operator ?? metadata.name ?? ""),
 								date: currentDate,
 								shift: groupShift,
 								startTime: startTimeValue,
@@ -479,7 +479,7 @@ export default function PlanningPage() {
 									<div className="flex justify-between items-start gap-4">
 										<div className="flex flex-col gap-0.5 flex-1">
 											<div className="flex items-center gap-2">
-												<h3 className="list-title">{item.machine}</h3>
+												<h3 className="list-title">{displayWorkOrder}</h3>
 												<div
 													className={cn(
 														"size-2 rounded-full",
@@ -493,9 +493,11 @@ export default function PlanningPage() {
 											</div>
 
 											<p className="list-subtext">
-												{item.partNumber} • {displayWorkOrder}
+												{item.partNumber} | {item.operator}
 											</p>
-											<p className="list-subtext">{item.operator}</p>
+											<p className="list-subtext">
+												{item.machine} | {item.code}
+											</p>
 										</div>
 
 										<div className="list-metric-column">

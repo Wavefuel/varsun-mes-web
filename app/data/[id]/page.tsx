@@ -25,7 +25,6 @@ import {
 	DeviceStateEventItemUpdateInput,
 } from "@/utils/scripts";
 
-
 interface DowntimeEvent {
 	id: string;
 	machineId: string;
@@ -45,7 +44,6 @@ interface DowntimeEvent {
 	metadataText: string;
 	tagsText: string;
 }
-
 
 const buildUtcRangeFromIstDate = (dateStr: string, currentShift: string) => {
 	const [year, month, day] = dateStr.split("-").map(Number);
@@ -456,6 +454,7 @@ function EventCard({
 	onReasonSaved: (eventId: string, updates: Record<string, unknown>) => void;
 }) {
 	const [isExpanded, setIsExpanded] = useState(true);
+	const [isSaving, setIsSaving] = useState(false);
 	const [reason, setReason] = useState(event.reason || "");
 
 	useEffect(() => {
@@ -525,6 +524,8 @@ function EventCard({
 
 	const handleSave = async (e: React.MouseEvent<HTMLButtonElement>) => {
 		e.stopPropagation();
+		if (isSaving) return;
+		setIsSaving(true);
 		try {
 			if (!clusterId) throw new Error("Cluster ID is not configured.");
 			if (!machineId || machineId === "Unknown Machine") throw new Error("Invalid machine ID");
@@ -637,6 +638,8 @@ function EventCard({
 			setIsExpanded(false);
 		} catch (err) {
 			console.error("Failed to save reason code:", err);
+		} finally {
+			setIsSaving(false);
 		}
 	};
 
@@ -678,7 +681,12 @@ function EventCard({
 
 			{/* Expanded Content (Form) */}
 			{isExpanded && (
-				<div className="bg-white border-t border-gray-100 px-4 py-2 space-y-2 animate-in slide-in-from-top-2 duration-200 rounded-b-xl">
+				<div
+					className={cn(
+						"bg-white border-t border-gray-100 px-4 py-2 space-y-2 animate-in slide-in-from-top-2 duration-200 rounded-b-xl",
+						isSaving && "opacity-80 pointer-events-none",
+					)}
+				>
 					{/* Reason Code */}
 					<div className="space-y-1.5">
 						<label className="text-[10px] font-bold text-gray-800 uppercase tracking-wider">Reason Code</label>
@@ -699,15 +707,17 @@ function EventCard({
 									e.stopPropagation();
 									setIsExpanded(false);
 								}}
-								className="px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors"
+								disabled={isSaving}
+								className="px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:pointer-events-none"
 							>
 								CANCEL
 							</button>
 							<button
 								onClick={handleSave}
-								className="px-4 py-1.5 bg-primary text-white text-xs font-bold rounded-lg shadow-sm hover:bg-primary/90 active:scale-95 transition-all"
+								disabled={isSaving}
+								className="px-4 py-1.5 bg-primary text-white text-xs font-bold rounded-lg shadow-sm hover:bg-primary/90 active:scale-95 transition-all disabled:opacity-70 disabled:pointer-events-none min-w-[60px] flex justify-center items-center"
 							>
-								SAVE
+								{isSaving ? <div className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" /> : "SAVE"}
 							</button>
 						</div>
 					</div>

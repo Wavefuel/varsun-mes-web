@@ -39,7 +39,7 @@ export default function Select({ value, onChange, options, placeholder = "Select
 	const selectedOption = normalizedOptions.find((opt) => opt.value === value);
 
 	return (
-		<div className={cn("relative", className)} ref={containerRef}>
+		<div className={cn("relative", className, isOpen && "z-[60]")} ref={containerRef}>
 			{label && <label className="text-[11px] font-bold text-gray-500 uppercase ml-1 block mb-1.5">{label}</label>}
 			<button
 				type="button"

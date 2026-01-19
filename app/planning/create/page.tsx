@@ -52,6 +52,7 @@ function AssignmentForm() {
 	const [devices, setDevices] = useState<DeviceSummary[]>(globalDevices);
 	const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
 	const [isLoading, setIsLoading] = useState(true);
+	const [isSaving, setIsSaving] = useState(false);
 	const [isError, setIsError] = useState(false);
 
 	// Form inputs state
@@ -78,18 +79,43 @@ function AssignmentForm() {
 
 	const deviceLabel = (device?: DeviceSummary) => device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
 
+	const parseTimeStr = (value: string) => {
+		const upper = value.trim().toUpperCase();
+		const isPM = upper.includes("PM");
+		const isAM = upper.includes("AM");
+		// Remove non-numeric/colon chars to get clean H:M
+		const clean = upper.replace(/[^0-9:]/g, "");
+		const parts = clean.split(":").map(Number);
+		let h = parts[0] || 0;
+		const m = parts[1] || 0;
+
+		if (isPM && h < 12) h += 12;
+		if (isAM && h === 12) h = 0;
+
+		return { h, m };
+	};
+
 	const timeToMinutes = (value: string) => {
-		const [h, m] = value.split(":").map((p) => Number(p));
-		return (Number.isFinite(h) ? h : 0) * 60 + (Number.isFinite(m) ? m : 0);
+		const { h, m } = parseTimeStr(value);
+		return h * 60 + m;
 	};
 
 	const buildDateTimeIso = (dateValue: string, timeValue: string, dayOffset = 0) => {
 		if (!dateValue || !timeValue) return undefined;
-		const base = new Date(dateValue);
+		// Parse YYYY-MM-DD manually to avoid UTC vs Local ambiguity
+		const dateParts = dateValue.split("-").map(Number);
+		if (dateParts.length !== 3) return undefined;
+		const [year, month, day] = dateParts;
+
+		const { h, m } = parseTimeStr(timeValue);
+
+		// Create date in LOCAL time to match user's perspective
+		const base = new Date(year, month - 1, day, h, m, 0, 0);
 		if (Number.isNaN(base.getTime())) return undefined;
-		const [hours, minutes] = timeValue.split(":").map((part) => Number(part));
-		base.setDate(base.getDate() + dayOffset);
-		base.setHours(Number.isFinite(hours) ? hours : 0, Number.isFinite(minutes) ? minutes : 0, 0, 0);
+
+		if (dayOffset !== 0) {
+			base.setDate(base.getDate() + dayOffset);
+		}
 		return base.toISOString();
 	};
 
@@ -110,12 +136,12 @@ function AssignmentForm() {
 	};
 
 	const toIsoDayRange = (dateStr: string) => {
-		const base = new Date(dateStr);
-		if (Number.isNaN(base.getTime())) return null;
-		const start = new Date(base);
-		start.setHours(0, 0, 0, 0);
-		const end = new Date(base);
-		end.setHours(23, 59, 59, 999);
+		const parts = dateStr.split("-").map(Number);
+		if (parts.length !== 3) return null;
+		const [y, m, d] = parts;
+		const start = new Date(y, m - 1, d, 0, 0, 0, 0);
+		const end = new Date(y, m - 1, d, 23, 59, 59, 999);
+		if (Number.isNaN(start.getTime())) return null;
 		return { rangeStart: start.toISOString(), rangeEnd: end.toISOString() };
 	};
 
@@ -123,7 +149,9 @@ function AssignmentForm() {
 		if (!value) return "";
 		const d = new Date(value);
 		if (Number.isNaN(d.getTime())) return "";
-		return d.toISOString().slice(11, 16);
+		const h = d.getHours().toString().padStart(2, "0");
+		const m = d.getMinutes().toString().padStart(2, "0");
+		return `${h}:${m}`;
 	};
 
 	const extractCreatedItemId = (payload: unknown, expectedSegmentStart: string | null, woId: string) => {
@@ -135,7 +163,9 @@ function AssignmentForm() {
 			const workOrder = String(metadata.workOrder ?? "");
 			if (!workOrder || workOrder !== woId) return false;
 			const segmentStart = item?.segmentStart ? String(item.segmentStart) : "";
-			return !expectedSegmentStart || !segmentStart || segmentStart === expectedSegmentStart;
+			// Compare ISO strings
+			if (!expectedSegmentStart || !segmentStart) return true;
+			return new Date(segmentStart).getTime() === new Date(expectedSegmentStart).getTime();
 		});
 		return typeof match?.id === "string" ? match.id : undefined;
 	};
@@ -213,6 +243,7 @@ function AssignmentForm() {
 					});
 
 					const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
+					console.log("loadData: Fetched groups", groups);
 					const mapped: Assignment[] = groups.flatMap((group) => {
 						const groupShift = currentShift === "Day" ? "Day Shift (S1)" : "Night Shift (S2)";
 
@@ -226,6 +257,7 @@ function AssignmentForm() {
 						const items = Array.isArray(group?.Items) ? group.Items : [];
 						return items.flatMap((item) => {
 							const metadata = item?.metadata ?? {};
+							console.log("loadData: Item metadata", metadata);
 							const wo = String(metadata.workOrder ?? "");
 							if (!wo) return [];
 
@@ -243,7 +275,7 @@ function AssignmentForm() {
 									workOrder: wo,
 									partNumber: String(metadata.partNumber ?? ""),
 									machine: machineName,
-									operator: String(metadata.operatorCode ?? ""),
+									operator: String(metadata.operatorName ?? metadata.operator ?? metadata.name ?? metadata.operatorCode ?? ""),
 									date: selectedDate,
 									shift: groupShift,
 									startTime: startTimeValue,
@@ -401,6 +433,8 @@ function AssignmentForm() {
 				const oc = String(metaDataObj.operatorCode ?? "");
 				const b = Number(metaDataObj.opBatchQty ?? 450);
 				const ep = String(metaDataObj.estPartAdd ?? "1.5m");
+				const rawOp = metaDataObj.opNumber ?? [];
+				const finalOp = Array.isArray(rawOp) ? rawOp.map(String) : [String(rawOp)];
 
 				if (cancelled) return;
 				setSelectedDeviceId(foundDeviceId);
@@ -409,11 +443,13 @@ function AssignmentForm() {
 				setShift(isNight ? "Night Shift (S2)" : "Day Shift (S1)");
 				setStartTime(toTimeHHMM(item?.segmentStart ?? null) || "08:00");
 				setEndTime(toTimeHHMM(item?.segmentEnd ?? null) || "20:00");
+				setOperator(String(metaDataObj.operatorName ?? metaDataObj.operator ?? metaDataObj.name ?? metaDataObj.operatorCode ?? ""));
 				setCode(oc || "");
 				setPartNumber(pn);
 				setWorkOrderId(workOrder);
 				setBatch(Number.isFinite(b) ? b : 450);
 				setEventItemId(String(item?.id ?? ""));
+				setOpNumber(finalOp);
 
 				if (ep.endsWith("h")) {
 					setEstUnit("hr");
@@ -454,6 +490,9 @@ function AssignmentForm() {
 	]);
 
 	const handleSave = async () => {
+		if (isSaving) return;
+		setIsSaving(true);
+
 		const newErrors: Record<string, boolean> = {};
 		if (!partNumber) newErrors.partNumber = true;
 		if (!workOrderId) newErrors.workOrderId = true;
@@ -464,60 +503,88 @@ function AssignmentForm() {
 		if (Object.keys(newErrors).length > 0) {
 			setErrors(newErrors);
 			toast.error("Please complete all required fields");
+			setIsSaving(false);
 			return;
 		}
 
-		const groupWindow = getShiftWindow(shift);
-		const groupRange = buildSegmentRangeIso(date, groupWindow.start, groupWindow.end);
-		if (!groupRange) {
-			toast.error("Invalid shift window");
-			return;
-		}
+		// Helper to validate against a given shift
+		const checkShiftValidity = (testShift: string) => {
+			const groupWindow = getShiftWindow(testShift);
+			const groupRange = buildSegmentRangeIso(date, groupWindow.start, groupWindow.end);
+			if (!groupRange) return { valid: false, error: "Invalid shift window" };
 
-		let itemSegment = buildSegmentRangeIso(date, startTime, endTime);
-		if (!itemSegment) {
-			toast.error("Invalid start/end time");
-			return;
-		}
+			let itemSegment = buildSegmentRangeIso(date, startTime, endTime);
+			if (!itemSegment) return { valid: false, error: "Invalid start/end time" };
 
-		// Night shift: treat early-morning times (e.g. 02:00) as part of the same
-		// overnight window (20:00–08:00) by placing them on the next calendar day.
-		if (isNightShift(shift)) {
-			const shiftWindow = getShiftWindow(shift); // typically 20:00–08:00
-			const startMin = timeToMinutes(startTime);
-			const endMin = timeToMinutes(endTime);
-			const windowEndMin = timeToMinutes(shiftWindow.end); // e.g. 08:00
+			// Night shift adjustment for early morning hours (next day)
+			if (isNightShift(testShift)) {
+				const shiftWindow = getShiftWindow(testShift);
+				const startMin = timeToMinutes(startTime);
+				const endMin = timeToMinutes(endTime);
+				const windowEndMin = timeToMinutes(shiftWindow.end);
 
-			const isEarlyStart = startMin < windowEndMin;
-			const isEarlyEnd = endMin <= windowEndMin;
+				const isEarlyStart = startMin < windowEndMin;
+				const isEarlyEnd = endMin <= windowEndMin;
 
-			if (isEarlyStart && isEarlyEnd) {
-				const startIso = buildDateTimeIso(date, startTime, 1);
-				const endIso = buildDateTimeIso(date, endTime, 1);
-				if (!startIso || !endIso) {
-					toast.error("Invalid start/end time");
-					return;
+				if (isEarlyStart && isEarlyEnd) {
+					const startIso = buildDateTimeIso(date, startTime, 1);
+					const endIso = buildDateTimeIso(date, endTime, 1);
+					if (!startIso || !endIso) return { valid: false, error: "Invalid start/end time" }; // Should not happen if buildDateTimeIso works
+					itemSegment = { start: startIso, end: endIso };
 				}
-				itemSegment = { start: startIso, end: endIso };
+			}
+
+			const groupStartMs = new Date(groupRange.start).getTime();
+			const groupEndMs = new Date(groupRange.end).getTime();
+			const itemStartMs = new Date(itemSegment.start).getTime();
+			const itemEndMs = new Date(itemSegment.end).getTime();
+
+			if (
+				!Number.isFinite(groupStartMs) ||
+				!Number.isFinite(groupEndMs) ||
+				!Number.isFinite(itemStartMs) ||
+				!Number.isFinite(itemEndMs) ||
+				itemStartMs < groupStartMs ||
+				itemEndMs > groupEndMs
+			) {
+				return { valid: false, error: "Order time must be within the selected shift window" };
+			}
+
+			return { valid: true, groupRange, itemSegment };
+		};
+
+		let result = checkShiftValidity(shift);
+		let finalShift = shift;
+
+		// If invalid, try auto-switching shift (unless Custom)
+		if (!result.valid && !/custom/i.test(shift)) {
+			const otherShift = isNightShift(shift) ? "Day Shift (S1)" : "Night Shift (S2)";
+			const otherResult = checkShiftValidity(otherShift);
+
+			if (otherResult.valid) {
+				result = otherResult;
+				finalShift = otherShift;
+				setShift(finalShift);
+				// Clear shift error if it was set
+				setErrors((prev) => {
+					const next = { ...prev };
+					delete next.shift;
+					return next;
+				});
 			}
 		}
 
-		const groupStartMs = new Date(groupRange.start).getTime();
-		const groupEndMs = new Date(groupRange.end).getTime();
-		const itemStartMs = new Date(itemSegment.start).getTime();
-		const itemEndMs = new Date(itemSegment.end).getTime();
-		if (
-			!Number.isFinite(groupStartMs) ||
-			!Number.isFinite(groupEndMs) ||
-			!Number.isFinite(itemStartMs) ||
-			!Number.isFinite(itemEndMs) ||
-			itemStartMs < groupStartMs ||
-			itemEndMs > groupEndMs
-		) {
+		if (!result.valid || !result.groupRange || !result.itemSegment) {
 			setErrors((prev) => ({ ...prev, shift: true }));
-			toast.error("Order time must be within the selected shift window");
+			toast.error(result.error || "Order time must be within the selected shift window");
+			setIsSaving(false);
 			return;
 		}
+
+		const { groupRange, itemSegment } = result;
+
+		const groupStartMs = new Date(groupRange.start).getTime();
+		const groupEndMs = new Date(groupRange.end).getTime();
 
 		const durationMinutes = Math.round((groupEndMs - groupStartMs) / 60000);
 		let estPerPartMinutes = Number.parseFloat(estTime);
@@ -555,6 +622,7 @@ function AssignmentForm() {
 				),
 				{ duration: 10000 },
 			);
+			setIsSaving(false);
 			return;
 		}
 
@@ -566,12 +634,20 @@ function AssignmentForm() {
 		if (lhtClusterId && lhtAccountId && lhtApplicationId) {
 			if (!selectedDeviceId) {
 				toast.error("Please select a device");
+				setIsSaving(false);
 				return;
 			}
 
 			try {
 				if (isEditMode && orderId) {
 					const resolvedGroupId = eventGroupId || orderId;
+
+					if (!eventItemId) {
+						toast.error("Critcal Error: Missing Item ID for update.");
+						setIsSaving(false);
+						return;
+					}
+
 					const payload: UpdateDeviceStateEventGroupData = {
 						deviceId: selectedDeviceId,
 						clusterId: lhtClusterId,
@@ -587,11 +663,12 @@ function AssignmentForm() {
 							items: {
 								update: [
 									{
-										id: eventItemId || resolvedGroupId,
+										id: eventItemId,
 										segmentStart: itemSegment.start,
 										segmentEnd: itemSegment.end,
 										category: "PLANNED",
 										operatorCode: code,
+										metadata: { operatorName: operator, operator: operator, name: operator, opNumber },
 										partNumber,
 										workOrder: workOrderId,
 										opBatchQty: batch,
@@ -604,6 +681,7 @@ function AssignmentForm() {
 					await updateDeviceStateEventGroup(payload);
 					lhtGroupId = orderId;
 					lhtDeviceId = selectedDeviceId;
+					lhtItemId = eventItemId;
 				} else {
 					let existingGroupId = findLocalGroupId();
 
@@ -648,6 +726,7 @@ function AssignmentForm() {
 									segmentEnd: itemSegment.end,
 									category: "PLANNED",
 									operatorCode: code,
+									metadata: { operatorName: operator, operator: operator, name: operator, opNumber },
 									partNumber,
 									workOrder: workOrderId,
 									opBatchQty: batch,
@@ -675,6 +754,7 @@ function AssignmentForm() {
 										segmentEnd: itemSegment.end,
 										category: "PLANNED",
 										operatorCode: code,
+										metadata: { operatorName: operator, operator: operator, name: operator, opNumber },
 										partNumber,
 										workOrder: workOrderId,
 										opBatchQty: batch,
@@ -697,6 +777,7 @@ function AssignmentForm() {
 			} catch (error) {
 				console.error(error);
 				toast.error(isEditMode ? "Failed to update assignment" : "Failed to save assignment");
+				setIsSaving(false);
 				return;
 			}
 		} else {
@@ -708,7 +789,7 @@ function AssignmentForm() {
 			machine,
 			operator,
 			date,
-			shift,
+			shift: finalShift,
 			startTime,
 			endTime,
 			code,
@@ -721,7 +802,7 @@ function AssignmentForm() {
 			lhtGroupId,
 		};
 
-		if (lhtDeviceId && lhtGroupId && !isEditMode) {
+		if (lhtDeviceId && lhtGroupId) {
 			const assignment: Assignment = {
 				id: lhtGroupId,
 				workOrder: workOrderId,
@@ -750,9 +831,9 @@ function AssignmentForm() {
 		}
 
 		if (date !== currentDate) setCurrentDate(date);
-
 		toast.success(isEditMode ? "Assignment updated" : "Assignment saved");
 		router.push("/planning");
+		setIsSaving(false);
 	};
 
 	const formData = useMemo<AssignmentFormData>(
@@ -872,15 +953,21 @@ function AssignmentForm() {
 							<>
 								<button
 									onClick={() => router.back()}
-									className="text-gray-500 font-bold text-xs uppercase hover:text-gray-700 active:scale-95 transition-transform"
+									disabled={isSaving}
+									className="text-gray-500 font-bold text-xs uppercase hover:text-gray-700 active:scale-95 transition-transform disabled:opacity-50 disabled:pointer-events-none"
 								>
 									Cancel
 								</button>
 								<button
 									onClick={handleSave}
-									className="bg-primary text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow-sm active:scale-95 transition-transform"
+									disabled={isSaving}
+									className="bg-primary text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow-sm active:scale-95 transition-transform disabled:opacity-70 disabled:pointer-events-none min-w-[60px] flex justify-center items-center"
 								>
-									SAVE
+									{isSaving ? (
+										<div className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+									) : (
+										"SAVE"
+									)}
 								</button>
 							</>
 						)}
@@ -911,18 +998,20 @@ function AssignmentForm() {
 				</div>
 			) : (
 				<main className="p-4 space-y-6 pb-24 relative">
-					<AssignmentDetailsCard
-						title={isEditMode ? "Assignment Details" : "New Assignment"}
-						icon={isEditMode ? "edit_note" : "precision_manufacturing"}
-						data={formData}
-						onChange={handleFormChange}
-						errors={errors}
-						readOnly={false}
-						isEditMode={isEditMode}
-						devices={devices}
-						selectedDeviceId={selectedDeviceId}
-						onDeviceChange={handleDeviceChange}
-					/>
+					<div className={isSaving ? "opacity-60 pointer-events-none" : ""}>
+						<AssignmentDetailsCard
+							title={isEditMode ? "Assignment Details" : "New Assignment"}
+							icon={isEditMode ? "edit_note" : "precision_manufacturing"}
+							data={formData}
+							onChange={handleFormChange}
+							errors={errors}
+							readOnly={false}
+							isEditMode={isEditMode}
+							devices={devices}
+							selectedDeviceId={selectedDeviceId}
+							onDeviceChange={handleDeviceChange}
+						/>
+					</div>
 
 					{isLoading && (
 						<div className="absolute inset-0 z-50 bg-white/50 backdrop-blur-sm flex items-center justify-center">

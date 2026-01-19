@@ -64,6 +64,7 @@ function StockEntryForm() {
 	const [resolvedOrder, setResolvedOrder] = useState<Order | null>(null);
 	const [devices, setDevices] = useState<DeviceSummary[]>(globalDevices);
 	const [isLoading, setIsLoading] = useState(true);
+	const [isSaving, setIsSaving] = useState(false);
 	const [isError, setIsError] = useState(false);
 
 	// Initialize itemCategory from context if available
@@ -399,7 +400,8 @@ function StockEntryForm() {
 	const progressPercent = Math.min((actualOutput / target) * 100, 100);
 
 	const handleSave = async () => {
-		if (!orderId) return;
+		if (!orderId || isSaving) return;
+		setIsSaving(true);
 
 		if (lighthouseEnabled && order.lhtDeviceId) {
 			try {
@@ -431,6 +433,7 @@ function StockEntryForm() {
 						segEndMs > rangeEndMs
 					) {
 						toast.error("Actual times must be within the shift window");
+						setIsSaving(false);
 						return;
 					}
 				}
@@ -578,6 +581,7 @@ function StockEntryForm() {
 			} catch (e) {
 				console.error(e);
 				toast.error("Failed to submit completion to Lighthouse");
+				setIsSaving(false);
 				return;
 			}
 		}
@@ -621,15 +625,21 @@ function StockEntryForm() {
 							<>
 								<button
 									onClick={() => router.back()}
-									className="text-gray-500 font-bold text-xs uppercase hover:text-gray-700 active:scale-95 transition-transform"
+									disabled={isSaving}
+									className="text-gray-500 font-bold text-xs uppercase hover:text-gray-700 active:scale-95 transition-transform disabled:opacity-50 disabled:pointer-events-none"
 								>
 									Cancel
 								</button>
 								<button
 									onClick={handleSave}
-									className="bg-primary text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow-sm active:scale-95 transition-transform"
+									disabled={isSaving}
+									className="bg-primary text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow-sm active:scale-95 transition-transform disabled:opacity-70 disabled:pointer-events-none min-w-[60px] flex justify-center items-center"
 								>
-									SAVE
+									{isSaving ? (
+										<div className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+									) : (
+										"SAVE"
+									)}
 								</button>
 							</>
 						)}
@@ -659,7 +669,7 @@ function StockEntryForm() {
 					/>
 				</div>
 			) : (
-				<main className="!p-4 !space-y-3 !pb-24">
+				<main className={cn("!p-4 !space-y-3 !pb-24", isSaving && "opacity-60 pointer-events-none")}>
 					{/* 1. Key Info - Context Aware (Standard Card) */}
 					<section className="grid grid-cols-3 !gap-2">
 						<div className="bg-white !rounded-lg border border-gray-100 shadow-sm !px-3 !py-1.5 flex flex-col justify-center items-start min-h-[52px]">

@@ -24,7 +24,6 @@ function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
 }
 
-
 const buildUtcRangeFromIstDate = (dateStr: string) => {
 	const [year, month, day] = dateStr.split("-").map(Number);
 	const utcMidnight = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
@@ -49,9 +48,7 @@ const metadataToArray = (value: unknown) => {
 };
 
 const metadataFromArray = (items: Array<{ key: string; value: string }>) => {
-	const entries = items
-		.map((item) => ({ key: item.key?.trim(), value: item.value?.trim() }))
-		.filter((item) => item.key);
+	const entries = items.map((item) => ({ key: item.key?.trim(), value: item.value?.trim() })).filter((item) => item.key);
 	return entries.length ? Object.fromEntries(entries.map((item) => [item.key as string, item.value ?? ""])) : undefined;
 };
 
@@ -79,6 +76,7 @@ export default function EventGroupingPage() {
 	}, [eventsDevices, machineId]);
 
 	const [loading, setLoading] = useState(true);
+	const [isSaving, setIsSaving] = useState(false);
 	const [isError, setIsError] = useState(false);
 
 	// Form State
@@ -119,13 +117,13 @@ export default function EventGroupingPage() {
 
 				const groupItems = Array.isArray(groups)
 					? groups.flatMap((group) => {
-						const items = Array.isArray(group?.Items) ? group.Items : [];
-						return items.map((item) => ({
-							...item,
-							groupId: group.id,
-							groupTags: Array.isArray(group.tags) ? group.tags : [],
-						}));
-					})
+							const items = Array.isArray(group?.Items) ? group.Items : [];
+							return items.map((item) => ({
+								...item,
+								groupId: group.id,
+								groupTags: Array.isArray(group.tags) ? group.tags : [],
+							}));
+						})
 					: [];
 
 				const toIstTime = (utcDate: string) =>
@@ -205,6 +203,8 @@ export default function EventGroupingPage() {
 
 	const handleSave = async (e: React.FormEvent) => {
 		e.preventDefault();
+		if (isSaving) return;
+		setIsSaving(true);
 		try {
 			if (!lhtClusterId) throw new Error("Cluster ID is not configured.");
 			if (!machineId || machineId === "Unknown Machine") throw new Error("Invalid machine ID");
@@ -294,7 +294,12 @@ export default function EventGroupingPage() {
 					body: {
 						rangeStart: fromDateUTC.toISOString(),
 						rangeEnd: toDateUTC.toISOString(),
-						tags: tagsText.trim() ? tagsText.split(",").map((tag) => tag.trim()).filter(Boolean) : undefined,
+						tags: tagsText.trim()
+							? tagsText
+									.split(",")
+									.map((tag) => tag.trim())
+									.filter(Boolean)
+							: undefined,
 						items: [itemPayload],
 					},
 				});
@@ -304,7 +309,10 @@ export default function EventGroupingPage() {
 
 			if (savedGroup?.Items && Array.isArray(savedGroup.Items)) {
 				const matched = savedGroup.Items.find((item: any) => {
-					return normalizeIso(item.segmentStart) === normalizeIso(eventData.rawStartTime) && normalizeIso(item.segmentEnd) === normalizeIso(eventData.rawEndTime);
+					return (
+						normalizeIso(item.segmentStart) === normalizeIso(eventData.rawStartTime) &&
+						normalizeIso(item.segmentEnd) === normalizeIso(eventData.rawEndTime)
+					);
 				});
 				savedItemId = matched?.id ?? savedItemId;
 			}
@@ -322,6 +330,7 @@ export default function EventGroupingPage() {
 			router.back();
 		} catch (error) {
 			console.error("Failed to save event details:", error);
+			setIsSaving(false);
 		}
 	};
 
@@ -357,16 +366,22 @@ export default function EventGroupingPage() {
 							<>
 								<button
 									onClick={() => router.back()}
-									className="text-gray-500 font-bold text-xs uppercase hover:text-gray-700 active:scale-95 transition-transform"
+									disabled={isSaving}
+									className="text-gray-500 font-bold text-xs uppercase hover:text-gray-700 active:scale-95 transition-transform disabled:opacity-50 disabled:pointer-events-none"
 								>
 									Cancel
 								</button>
 								<button
 									type="submit"
 									form="event-grouping-form"
-									className="bg-primary text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow-sm active:scale-95 transition-transform"
+									disabled={isSaving}
+									className="bg-primary text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow-sm active:scale-95 transition-transform disabled:opacity-80 disabled:pointer-events-none min-w-[60px] flex justify-center items-center"
 								>
-									SAVE
+									{isSaving ? (
+										<div className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+									) : (
+										"SAVE"
+									)}
 								</button>
 							</>
 						)}
@@ -404,9 +419,12 @@ export default function EventGroupingPage() {
 							<span className="material-symbols-outlined text-gray-400 !text-lg">edit_note</span>
 						</div>
 
-						<form id="event-grouping-form" className="!p-4 !space-y-2" onSubmit={handleSave}>
+						<form
+							id="event-grouping-form"
+							className={cn("!p-4 !space-y-2", isSaving && "opacity-60 pointer-events-none")}
+							onSubmit={handleSave}
+						>
 							{/* Title & Description */}
-						
 
 							{/* Times */}
 							<div className="grid grid-cols-2 !gap-3">
