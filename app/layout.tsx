@@ -19,6 +19,7 @@ import FontDebugger from "@/components/FontDebugger";
 import AppSplash from "@/components/AppSplash"; // Handles initial load to prevent icon FOUC
 
 import { DataProvider } from "@/context/DataContext";
+import AuthGuard from "@/components/AuthGuard";
 
 import { Toaster } from "sonner";
 
@@ -44,6 +45,7 @@ export default function RootLayout({
 				<Toaster position="top-left" richColors closeButton toastOptions={{ duration: 5000, style: { borderRadius: "0px" } }} />
 				<DataProvider>
 					<div className="mobile-wrapper relative bg-[#F8FAFB] min-h-screen shadow-2xl overflow-hidden max-w-[480px] w-full mx-auto">
+						<AuthGuard />
 						<AppSplash />
 						<div className="pb-20">{children}</div>
 						<BottomNav />
