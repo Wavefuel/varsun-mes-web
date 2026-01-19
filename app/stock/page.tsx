@@ -158,6 +158,9 @@ export default function StockPage() {
 						const groupId = String(group?.id ?? workOrder);
 						const itemId = String(item?.id ?? "");
 
+						const rawOp = metadata.opNumber ?? "0";
+						const opNumber = Array.isArray(rawOp) ? rawOp.map(String) : [String(rawOp)];
+
 						return [
 							{
 								id: groupId,
@@ -170,7 +173,7 @@ export default function StockPage() {
 								startTime,
 								endTime,
 								code: String(metadata.operatorCode ?? ""),
-								opNumber: 0,
+								opNumber,
 								batch,
 								estPart,
 								target: batch,

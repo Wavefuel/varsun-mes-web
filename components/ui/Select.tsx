@@ -15,9 +15,10 @@ interface SelectProps {
 	placeholder?: string;
 	className?: string;
 	label?: string;
+	disabled?: boolean;
 }
 
-export default function Select({ value, onChange, options, placeholder = "Select...", className, label }: SelectProps) {
+export default function Select({ value, onChange, options, placeholder = "Select...", className, label, disabled }: SelectProps) {
 	const [isOpen, setIsOpen] = React.useState(false);
 	const containerRef = React.useRef<HTMLDivElement>(null);
 
@@ -39,21 +40,24 @@ export default function Select({ value, onChange, options, placeholder = "Select
 
 	return (
 		<div className={cn("relative", className)} ref={containerRef}>
-			{label && <label className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1.5 block ml-1">{label}</label>}
+			{label && <label className="text-[11px] font-bold text-gray-500 uppercase ml-1 block mb-1.5">{label}</label>}
 			<button
 				type="button"
-				onClick={() => setIsOpen(!isOpen)}
+				onClick={() => !disabled && setIsOpen(!isOpen)}
+				disabled={disabled}
 				className={cn(
-					"flex items-center justify-between w-full h-11 px-4 text-left bg-white border rounded-xl transition-all duration-200",
-					isOpen ? "border-primary ring-2 ring-primary/10 shadow-sm" : "border-gray-200 hover:border-gray-300 hover:bg-gray-50/50",
+					"flex items-center justify-between w-full py-2 px-3 text-left bg-gray-50 border border-gray-200 rounded-lg transition-all duration-200",
+					isOpen ? "border-gray-200" : "hover:border-gray-300",
+					disabled && "opacity-60 cursor-not-allowed bg-gray-100",
+					className,
 				)}
 			>
-				<span className={cn("text-[15px] font-medium truncate", !selectedOption ? "text-gray-400" : "text-gray-700")}>
+				<span className={cn("text-xs truncate", !selectedOption ? "text-gray-400" : "text-gray-800")}>
 					{selectedOption ? selectedOption.label : placeholder}
 				</span>
 				<span
 					className={cn(
-						"material-symbols-outlined text-gray-400 transition-transform duration-300 text-[20px]",
+						"material-symbols-outlined text-gray-400 transition-transform duration-300 text-[18px]",
 						isOpen && "rotate-180 text-primary",
 					)}
 				>

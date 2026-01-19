@@ -204,6 +204,9 @@ export default function PlanningPage() {
 						const groupId = String(group?.id ?? workOrder);
 						const itemId = String(item?.id ?? "");
 
+						const rawOp = metadata.opNumber ?? "0";
+						const opNumber = Array.isArray(rawOp) ? rawOp.map(String) : [String(rawOp)];
+
 						return [
 							{
 								id: groupId, // groupId for routing/edit
@@ -216,7 +219,7 @@ export default function PlanningPage() {
 								startTime: startTimeValue,
 								endTime: endTimeValue,
 								code: String(metadata.operatorCode ?? ""),
-								opNumber: 0,
+								opNumber,
 								batch,
 								estPart,
 								target: batch,

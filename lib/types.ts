@@ -10,7 +10,7 @@ export interface Order {
 	startTime: string;
 	endTime: string;
 	code: string;
-	opNumber: number;
+	opNumber: string[];
 	batch: number;
 	estPart: string;
 	target: number;
@@ -40,7 +40,7 @@ export const MOCK_INITIAL_ORDERS: Order[] = [
 		startTime: "06:00",
 		endTime: "14:00",
 		code: "SH-D24",
-		opNumber: 20,
+		opNumber: [],
 		batch: 450,
 		estPart: "1.5m",
 		target: 450,
@@ -56,7 +56,7 @@ export const MOCK_INITIAL_ORDERS: Order[] = [
 		startTime: "06:00",
 		endTime: "14:00",
 		code: "SH-D24",
-		opNumber: 10,
+		opNumber: ["10"],
 		batch: 500,
 		estPart: "4.5m",
 		target: 500,
@@ -75,7 +75,7 @@ export const MOCK_INITIAL_ORDERS: Order[] = [
 		startTime: "14:00",
 		endTime: "22:00",
 		code: "SH-N25",
-		opNumber: 30,
+		opNumber: ["30"],
 		batch: 120,
 		estPart: "8.0m",
 		target: 120,

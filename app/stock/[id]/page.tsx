@@ -106,7 +106,7 @@ function StockEntryForm() {
 				code: "",
 				partNumber: "",
 				workOrderId: "",
-				opNumber: 0,
+				opNumber: [],
 				batch: 0,
 				estTime: "",
 				estUnit: "min",
@@ -216,34 +216,7 @@ function StockEntryForm() {
 
 					// IDs
 					if (built.lhtGroupId) setEventGroupId(built.lhtGroupId);
-					// For item ID, stockOrders might map lhtItemId or we assume group ID logic
-					// StockPage mapping doesn't explicitly have lhtItemId, it maps items to rows
-					// Actually StockPage maps: lhtGroupId: String(group?.id ?? workOrder)
-					// But doesn't map 'lhtItemId'.
-					// We might need to fetch anyway if lhtItemId or precise details are missing?
-					// StockPage:
-					// const mapped: Order[] = groups.flatMap(...)
-					// It does NOT map lhtItemId.
-					// SO WE MIGHT NEED TO FETCH ANYWAY if we need the ITEM ID for updates.
-					// However, if we just need to VIEW, it's fine.
-					// But this page is for COMPLETION (Update).
-					// To update a Lighthouse item, we need its ID.
-
-					// Checking if we can skip...
-					// The update logic uses: eventItemId
-					// stockOrders does not seem to put eventItemId into the Order type currently?
-					// Let's check types.ts
 				}
-
-				// If we don't have the fully resolved IDs (specifically ITEM ID for Updates), we must fetch.
-				// cachedOrder is type Order. Order interface doesn't have lhtItemId (it has lhtGroupId).
-				// Assignment interface HAS lhtItemId.
-				// StockPage maps to Order.
-
-				// SO: We probably DO need to fetch to get the specific Item ID within the group if it's not in the Order type.
-				// UNLESS we update Order type to include lhtItemId.
-
-				// Let's stick to fetching for now to be safe, BUT prioritize ID lookup logic below.
 
 				// 3. Sync logic from context if available
 				if (orderFromContext) {
@@ -304,6 +277,10 @@ function StockEntryForm() {
 				const category = typeof item?.category === "string" ? String(item.category).toUpperCase() : "";
 				const status: Order["status"] = category === "COMPLETED" ? "COMPLETED" : "PLANNED";
 
+				// Handle parsing opNumber (could be number or string or array)
+				const rawOp = metadata.opNumber ?? "0";
+				const opNumber = Array.isArray(rawOp) ? rawOp.map(String) : [String(rawOp)];
+
 				const built: Order = {
 					id: orderId,
 					partNumber: String(metadata.partNumber ?? ""),
@@ -314,7 +291,7 @@ function StockEntryForm() {
 					startTime: toTimeHHMM(item?.segmentStart ?? null) || "",
 					endTime: toTimeHHMM(item?.segmentEnd ?? null) || "",
 					code: String(metadata.operatorCode ?? ""),
-					opNumber: 0,
+					opNumber: opNumber,
 					batch: Number(metadata.opBatchQty ?? 0),
 					estPart: String(metadata.estPartAdd ?? ""),
 					target: Number(metadata.opBatchQty ?? 1),

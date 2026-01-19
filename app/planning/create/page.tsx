@@ -55,15 +55,15 @@ function AssignmentForm() {
 
 	// Form inputs state
 	const [machine, setMachine] = useState("CNC-042 (Alpha)");
-	const [operator, setOperator] = useState("Marcus Jensen");
+	const [operator, setOperator] = useState("");
 	const [date, setDate] = useState(() => queryDate || currentDate);
 	const [shift, setShift] = useState("Day Shift (S1)");
 	const [startTime, setStartTime] = useState("08:00");
 	const [endTime, setEndTime] = useState("20:00");
-	const [code, setCode] = useState("SH-D24");
+	const [code, setCode] = useState("");
 	const [partNumber, setPartNumber] = useState("");
 	const [workOrderId, setWorkOrderId] = useState("");
-	const [opNumber, setOpNumber] = useState(20);
+	const [opNumber, setOpNumber] = useState<string[]>([]);
 	const [batch, setBatch] = useState(450);
 	const [estTime, setEstTime] = useState("1.5");
 	const [estUnit, setEstUnit] = useState<"min" | "hr">("min");
@@ -125,14 +125,14 @@ function AssignmentForm() {
 		return d.toISOString().slice(11, 16);
 	};
 
-	const extractCreatedItemId = (payload: unknown, expectedSegmentStart: string | null) => {
+	const extractCreatedItemId = (payload: unknown, expectedSegmentStart: string | null, woId: string) => {
 		if (!payload || typeof payload !== "object") return undefined;
 		const group = payload as Record<string, unknown>;
 		const items = Array.isArray(group.Items) ? (group.Items as Record<string, unknown>[]) : [];
 		const match = items.find((item) => {
 			const metadata = item?.metadata && typeof item.metadata === "object" ? (item.metadata as Record<string, unknown>) : {};
 			const workOrder = String(metadata.workOrder ?? "");
-			if (!workOrder || workOrder !== workOrderId) return false;
+			if (!workOrder || workOrder !== woId) return false;
 			const segmentStart = item?.segmentStart ? String(item.segmentStart) : "";
 			return !expectedSegmentStart || !segmentStart || segmentStart === expectedSegmentStart;
 		});
@@ -158,6 +158,8 @@ function AssignmentForm() {
 			setIsLoading(true);
 
 			try {
+				const selectedDate = queryDate || date || currentDate;
+
 				// 1. Fetch Devices (Always needed)
 				// We fetch this first so we can resolve device labels/IDs for the assignment.
 				let deviceList = devices;
@@ -168,7 +170,96 @@ function AssignmentForm() {
 					setGlobalDevices(deviceList);
 				}
 
-				// 2. Handle Create Mode (Default Selection) vs Edit Mode (Load Order)
+				// 2. Fetch Assignments if missing (needed for Planned Queue)
+				if (globalDataDate !== selectedDate || !globalAssignments) {
+					const range = toIsoDayRange(selectedDate);
+					if (range) {
+						const groupsUnknown = await readDeviceStateEventGroupsWithItemsByCluster({
+							clusterId: lhtClusterId,
+							applicationId: lhtApplicationId,
+							account: { id: lhtAccountId },
+							query: { rangeStart: range.rangeStart, rangeEnd: range.rangeEnd },
+							deviceId: undefined,
+						});
+
+						type ApiEventItem = {
+							id?: string;
+							category?: string | null;
+							segmentStart?: string | null;
+							segmentEnd?: string | null;
+							metadata?: Record<string, unknown> | null;
+						};
+						type ApiEventGroup = {
+							id?: string;
+							deviceId?: string;
+							rangeStart?: string | null;
+							rangeEnd?: string | null;
+							Items?: ApiEventItem[] | null;
+						};
+
+						const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
+						const mapped: Assignment[] = groups.flatMap((group) => {
+							const rangeStart = typeof group?.rangeStart === "string" ? group.rangeStart : null;
+							const rangeEnd = typeof group?.rangeEnd === "string" ? group.rangeEnd : null;
+							const shift =
+								rangeStart && rangeEnd && new Date(rangeStart).toDateString() !== new Date(rangeEnd).toDateString()
+									? "Night Shift (S2)"
+									: "Day Shift (S1)";
+
+							const deviceId = typeof group?.deviceId === "string" ? group.deviceId : "";
+							const machineName = (() => {
+								if (!deviceId) return "Unknown Device";
+								const dev = deviceList.find((d) => d.id === deviceId);
+								return dev ? deviceLabel(dev) : deviceId;
+							})();
+
+							const items = Array.isArray(group?.Items) ? group.Items : [];
+							return items.flatMap((item) => {
+								const metadata = item?.metadata ?? {};
+								const wo = String(metadata.workOrder ?? "");
+								if (!wo) return [];
+
+								const startTimeValue = toTimeHHMM(item?.segmentStart ?? null);
+								const endTimeValue = toTimeHHMM(item?.segmentEnd ?? null);
+								const category = typeof item?.category === "string" ? String(item.category).toUpperCase() : "";
+								const status: Assignment["status"] = category === "COMPLETED" ? "COMPLETED" : "PLANNED";
+
+								const rawOp = metadata.opNumber ?? "0";
+								const op = Array.isArray(rawOp) ? rawOp.map(String) : [String(rawOp)];
+
+								return [
+									{
+										id: String(group?.id ?? wo),
+										workOrder: wo,
+										partNumber: String(metadata.partNumber ?? ""),
+										machine: machineName,
+										operator: String(metadata.operatorCode ?? ""),
+										date: selectedDate,
+										shift,
+										startTime: startTimeValue,
+										endTime: endTimeValue,
+										code: String(metadata.operatorCode ?? ""),
+										opNumber: op,
+										batch: Number(metadata.opBatchQty ?? 0),
+										estPart: String(metadata.estPartAdd ?? ""),
+										target: Number(metadata.opBatchQty ?? 0),
+										status,
+										lhtDeviceId: deviceId || undefined,
+										lhtGroupId: String(group?.id ?? ""),
+										lhtItemId: String(item?.id ?? ""),
+									},
+								];
+							});
+						});
+
+						if (!cancelled) {
+							setGlobalAssignments(mapped);
+							setGlobalDataDate(selectedDate);
+						}
+					}
+				}
+
+				// 3. Handle Create Mode (Default Selection) vs Edit Mode (Load Order)
 				if (!isEditMode || !orderId) {
 					// --- CREATE MODE ---
 					// Set default device selection if none selected
@@ -201,7 +292,7 @@ function AssignmentForm() {
 					setCode(cached.code);
 					setPartNumber(cached.partNumber);
 					setWorkOrderId(cached.workOrder || "");
-					setOpNumber(cached.opNumber);
+					setOpNumber(Array.isArray(cached.opNumber) ? cached.opNumber : []);
 					setBatch(cached.batch);
 
 					const parsedEst = cached.estPart || "1.5m";
@@ -230,10 +321,13 @@ function AssignmentForm() {
 					setShift(existing.shift);
 					setStartTime(existing.startTime);
 					setEndTime(existing.endTime);
-					setCode(existing.code || "SH-D24");
+					setCode(existing.code || "");
 					setPartNumber(existing.partNumber);
 					setWorkOrderId(existing.id);
-					setOpNumber(existing.opNumber || 20);
+					// Handle type conversion if existing data is mixed
+					// @ts-ignore - opNumber might be number in legacy data
+					const op = existing.opNumber;
+					setOpNumber(Array.isArray(op) ? op : []);
 					setBatch(existing.batch || 450);
 
 					const parsedEst = existing.estPart || "1.5m";
@@ -251,7 +345,6 @@ function AssignmentForm() {
 				}
 
 				// API fallback
-				const selectedDate = queryDate || date || currentDate;
 				const range = toIsoDayRange(selectedDate);
 				if (!range) {
 					throw new Error("Invalid date");
@@ -322,7 +415,7 @@ function AssignmentForm() {
 				setShift(isNight ? "Night Shift (S2)" : "Day Shift (S1)");
 				setStartTime(toTimeHHMM(item?.segmentStart ?? null) || "08:00");
 				setEndTime(toTimeHHMM(item?.segmentEnd ?? null) || "20:00");
-				setCode(oc || "SH-D24");
+				setCode(oc || "");
 				setPartNumber(pn);
 				setWorkOrderId(workOrder);
 				setBatch(Number.isFinite(b) ? b : 450);
@@ -369,6 +462,9 @@ function AssignmentForm() {
 		const newErrors: Record<string, boolean> = {};
 		if (!partNumber) newErrors.partNumber = true;
 		if (!workOrderId) newErrors.workOrderId = true;
+		if (!code) newErrors.code = true;
+		if (!operator) newErrors.operator = true;
+		if (!opNumber || opNumber.length === 0) newErrors.opNumber = true;
 
 		if (Object.keys(newErrors).length > 0) {
 			setErrors(newErrors);
@@ -564,7 +660,7 @@ function AssignmentForm() {
 								},
 							],
 						});
-						lhtItemId = extractCreatedItemId(updatedGroup, itemSegment.start);
+						lhtItemId = extractCreatedItemId(updatedGroup, itemSegment.start, workOrderId);
 						lhtGroupId = existingGroupId;
 						lhtDeviceId = selectedDeviceId;
 					} else {
@@ -592,7 +688,7 @@ function AssignmentForm() {
 								],
 							},
 						});
-						lhtItemId = extractCreatedItemId(created, itemSegment.start);
+						lhtItemId = extractCreatedItemId(created, itemSegment.start, workOrderId);
 
 						if (created && typeof created === "object") {
 							const maybeCreated = created as Record<string, unknown>;
@@ -691,6 +787,7 @@ function AssignmentForm() {
 					break;
 				case "operator":
 					setOperator(value as string);
+					if (errors.operator) setErrors((prev) => ({ ...prev, operator: false }));
 					break;
 				case "date":
 					setDate(value as string);
@@ -706,6 +803,7 @@ function AssignmentForm() {
 					break;
 				case "code":
 					setCode(value as string);
+					if (errors.code) setErrors((prev) => ({ ...prev, code: false }));
 					break;
 				case "partNumber":
 					setPartNumber(value as string);
@@ -716,7 +814,8 @@ function AssignmentForm() {
 					if (errors.workOrderId) setErrors((prev) => ({ ...prev, workOrderId: false }));
 					break;
 				case "opNumber":
-					setOpNumber(value as number);
+					setOpNumber(value as string[]);
+					if (errors.opNumber) setErrors((prev) => ({ ...prev, opNumber: false }));
 					break;
 				case "batch":
 					setBatch(value as number);
@@ -754,7 +853,7 @@ function AssignmentForm() {
 	);
 
 	const queueSource = useMemo(() => {
-		if (globalAssignments && globalAssignments.length > 0) return globalAssignments;
+		if (globalAssignments !== null) return globalAssignments;
 		return orders;
 	}, [globalAssignments, orders]);
 

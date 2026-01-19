@@ -1,8 +1,11 @@
-import { AssignmentField, AssignmentInput, AssignmentLabel, AssignmentSelect } from "./AssignmentComponents";
+import { AssignmentField, AssignmentInput, AssignmentLabel } from "./AssignmentComponents";
 import React, { useEffect, useRef, useState } from "react";
+import { format, parse } from "date-fns";
 
 import CustomDatePicker from "@/components/CustomDatePicker";
 import type { DeviceSummary } from "@/utils/scripts";
+import Select from "@/components/ui/Select";
+import TagInput from "@/components/ui/TagInput";
 
 export interface AssignmentFormData {
 	machine: string;
@@ -14,7 +17,7 @@ export interface AssignmentFormData {
 	code: string;
 	partNumber: string;
 	workOrderId: string;
-	opNumber: number;
+	opNumber: string[];
 	batch: number;
 	estTime: string;
 	estUnit: string;
@@ -58,12 +61,11 @@ export default function AssignmentDetailsCard({
 
 	// Shift validation
 	const isDayShift = data.shift === "Day Shift (S1)";
-	// 8am to 8pm constraints
-	const minTime = isDayShift ? "08:00" : undefined;
-	const maxTime = isDayShift ? "20:00" : undefined;
+	// 8am to 8pm constraints (currently unused in new picker but good for reference)
+	// const minTime = isDayShift ? "08:00" : undefined;
+	// const maxTime = isDayShift ? "20:00" : undefined;
 
-	const deviceLabel = (device?: DeviceSummary) =>
-		device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
+	const deviceLabel = (device?: DeviceSummary) => device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
 
 	useEffect(() => {
 		function handleClickOutside(event: MouseEvent) {
@@ -77,6 +79,26 @@ export default function AssignmentDetailsCard({
 		};
 	}, []);
 
+	// Helper function to format time for display
+	const formatTimeDisplay = (time24: string) => {
+		if (!time24) return "";
+		try {
+			const date = parse(time24, "HH:mm", new Date());
+			return format(date, "hh:mm aa");
+		} catch (e) {
+			return time24;
+		}
+	};
+
+	// Prepare Device Options for Select
+	const deviceOptions = devices.length
+		? devices.map((d) => ({ label: deviceLabel(d), value: d.id }))
+		: [
+				{ label: "CNC-042 (Alpha)", value: "CNC-042 (Alpha)" },
+				{ label: "LATH-09 (Beta)", value: "LATH-09 (Beta)" },
+				{ label: "MILL-12 (Gamma)", value: "MILL-12 (Gamma)" },
+			];
+
 	return (
 		<section className={`bg-white !rounded-xl border border-gray-100 shadow-sm ${hideHeader ? "!border-t-0 !rounded-t-none" : ""}`}>
 			{!hideHeader && (
@@ -86,58 +108,37 @@ export default function AssignmentDetailsCard({
 				</div>
 			)}
 
-			<div className="p-4  space-y-2">
+			<div className="p-3 space-y-2">
 				{/* Dropdowns Pair (Machine & Operator) */}
 				<div className="grid grid-cols-2 !gap-3">
-					<AssignmentField label="Machine">
-						<AssignmentSelect
-							value={selectedDeviceId || data.machine}
-							title={
-								devices.length
-									? deviceLabel(devices.find((d) => d.id === (selectedDeviceId || data.machine)))
-									: data.machine
-							}
-							onChange={(e) => {
-								const nextId = e.target.value;
+					<div className="space-y-1.5">
+						<Select
+							label="Machine"
+							placeholder="Select Machine"
+							options={deviceOptions}
+							value={selectedDeviceId || (devices.length ? "" : data.machine)}
+							onChange={(val) => {
 								if (devices.length) {
-									onDeviceChange?.(nextId);
-									const device = devices.find((entry) => entry.id === nextId);
+									onDeviceChange?.(val);
+									const device = devices.find((entry) => entry.id === val);
 									handleChange("machine", deviceLabel(device));
 								} else {
-									handleChange("machine", nextId);
+									handleChange("machine", val);
 								}
 							}}
 							disabled={readOnly}
-						>
-							{devices.length
-								? devices.map((device) => {
-									const label = deviceLabel(device);
-									return (
-										<option key={device.id} value={device.id} title={label}>
-											{label.length > 25 ? label.substring(0, 25) + "..." : label}
-										</option>
-									);
-								})
-								: [
-									<option key="cnc" value="CNC-042 (Alpha)" title="CNC-042 (Alpha)">
-										CNC-042 (Alpha)
-									</option>,
-									<option key="lath" value="LATH-09 (Beta)" title="LATH-09 (Beta)">
-										LATH-09 (Beta)
-									</option>,
-									<option key="mill" value="MILL-12 (Gamma)" title="MILL-12 (Gamma)">
-										MILL-12 (Gamma)
-									</option>,
-								]}
-						</AssignmentSelect>
-					</AssignmentField>
+						/>
+					</div>
 
 					<AssignmentField label="Operator">
-						<AssignmentSelect value={data.operator} onChange={(e) => handleChange("operator", e.target.value)} disabled={readOnly}>
-							<option>Marcus Jensen</option>
-							<option>Sarah Chen</option>
-							<option>David Miller</option>
-						</AssignmentSelect>
+						<AssignmentInput
+							type="text"
+							value={data.operator}
+							onChange={(e) => handleChange("operator", e.target.value)}
+							disabled={readOnly}
+							placeholder="Enter Operator Name"
+							hasError={!!errors.operator}
+						/>
 					</AssignmentField>
 				</div>
 
@@ -150,10 +151,10 @@ export default function AssignmentDetailsCard({
 									<span className="!text-xs font-medium block pr-8 text-gray-500">
 										{data.date
 											? new Date(data.date).toLocaleDateString("en-US", {
-												month: "short",
-												day: "numeric",
-												year: "numeric",
-											})
+													month: "short",
+													day: "numeric",
+													year: "numeric",
+												})
 											: "Select Date"}
 									</span>
 									<span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 !text-gray-400 !text-xl pointer-events-none">
@@ -169,10 +170,10 @@ export default function AssignmentDetailsCard({
 											<span className="!text-xs font-medium block pr-8">
 												{data.date
 													? new Date(data.date).toLocaleDateString("en-US", {
-														month: "short",
-														day: "numeric",
-														year: "numeric",
-													})
+															month: "short",
+															day: "numeric",
+															year: "numeric",
+														})
 													: "Select Date"}
 											</span>
 											<span className="material-symbols-outlined absolute right-2 top-1/2 -translate-y-1/2 !text-gray-400 !text-xl pointer-events-none">
@@ -185,66 +186,90 @@ export default function AssignmentDetailsCard({
 						</div>
 					</AssignmentField>
 
-					<AssignmentField label="Shift Work">
-						<AssignmentSelect value={data.shift} onChange={(e) => handleChange("shift", e.target.value)} disabled={readOnly}>
-							<option>Day Shift (S1)</option>
-							<option>Night Shift (S2)</option>
-							<option>Custom</option>
-						</AssignmentSelect>
-					</AssignmentField>
+					<div className="space-y-1.5">
+						<Select
+							label="Shift Work"
+							options={["Day Shift (S1)", "Night Shift (S2)", "Custom"]}
+							value={data.shift}
+							onChange={(val) => handleChange("shift", val)}
+							disabled={readOnly}
+						/>
+					</div>
 				</div>
 
-				{/* Visual Logic Badges (Code/Start/End) */}
+				{/* Schedule Visual Logic */}
 				<div className="!space-y-1.5">
 					<AssignmentLabel>Schedule</AssignmentLabel>
 					<div
-						className={`flex !gap-2 bg-primary/5 !p-3 rounded-lg border transition-colors ${errors.shift ? "border-red-500 bg-red-50" : "border-primary/10"
-							}`}
+						className={`flex !gap-2 bg-primary/5 !p-2 rounded-lg border transition-colors ${
+							errors.shift || errors.code ? "border-red-500 bg-red-50" : "border-primary/10"
+						}`}
 					>
 						<div className="flex-1 flex flex-col justify-center">
-							<p className="!text-[9px] font-bold text-primary/60 uppercase leading-none mb-[2px]">Code</p>
+							<p className="!text-[9px] font-bold text-primary/60 uppercase leading-none mb-1">Code</p>
 							<input
 								type="text"
 								value={data.code}
 								onChange={(e) => handleChange("code", e.target.value)}
 								disabled={readOnly}
-								className={`w-full bg-transparent border-none p-0 text-xs font-bold text-primary focus:ring-0 placeholder-primary/50 leading-none h-auto ${readOnly ? "cursor-not-allowed" : ""
-									}`}
+								placeholder="SH-D24"
+								className={`w-full bg-transparent border-none p-0 text-xs font-bold text-primary focus:ring-0 placeholder-primary/50 leading-none h-auto ${
+									readOnly ? "cursor-not-allowed" : ""
+								}`}
 							/>
 						</div>
 						<div className="w-px bg-primary/20"></div>
 						<div className="flex-1 flex flex-col justify-center">
-							<p className="!text-[9px] font-bold text-primary/60 uppercase leading-none mb-[2px]">Start</p>
-							<input
-								type="time"
-								value={data.startTime}
-								onChange={(e) => handleChange("startTime", e.target.value)}
-								disabled={readOnly}
-								min={minTime}
-								max={maxTime}
-								className={`w-full bg-transparent border-none p-0 text-xs font-bold text-primary focus:ring-0 leading-none h-auto ${readOnly ? "cursor-not-allowed" : ""
-									}`}
-							/>
+							<p className="!text-[9px] font-bold text-primary/60 uppercase leading-none mb-1">Start</p>
+							<div className="flex flex-col justify-center">
+								{readOnly ? (
+									<div className="text-xs font-bold text-primary">{formatTimeDisplay(data.startTime)}</div>
+								) : (
+									<CustomDatePicker
+										showTimeSelectOnly
+										value={data.startTime}
+										onChange={(val) => handleChange("startTime", val)}
+										dateFormat="hh:mm aa"
+										customInput={
+											<button
+												type="button"
+												className="w-full text-left bg-transparent border-none p-0 text-xs font-bold text-primary focus:ring-0 leading-none h-auto cursor-pointer block"
+											>
+												{formatTimeDisplay(data.startTime) || "00:00 AM"}
+											</button>
+										}
+									/>
+								)}
+							</div>
 						</div>
 						<div className="w-px bg-primary/20"></div>
 						<div className="flex-1 flex flex-col justify-center">
-							<p className="!text-[9px] font-bold text-primary/60 uppercase leading-none mb-[2px]">End</p>
-							<input
-								type="time"
-								value={data.endTime}
-								onChange={(e) => handleChange("endTime", e.target.value)}
-								disabled={readOnly}
-								min={minTime}
-								max={maxTime}
-								className={`w-full bg-transparent border-none p-0 text-xs font-bold text-primary focus:ring-0 leading-none h-auto ${readOnly ? "cursor-not-allowed" : ""
-									}`}
-							/>
+							<p className="!text-[9px] font-bold text-primary/60 uppercase leading-none mb-1">End</p>
+							<div className="flex flex-col justify-center">
+								{readOnly ? (
+									<div className="text-xs font-bold text-primary">{formatTimeDisplay(data.endTime)}</div>
+								) : (
+									<CustomDatePicker
+										showTimeSelectOnly
+										value={data.endTime}
+										onChange={(val) => handleChange("endTime", val)}
+										dateFormat="hh:mm aa"
+										customInput={
+											<button
+												type="button"
+												className="w-full text-left bg-transparent border-none p-0 text-xs font-bold text-primary focus:ring-0 leading-none h-auto cursor-pointer block"
+											>
+												{formatTimeDisplay(data.endTime) || "00:00 AM"}
+											</button>
+										}
+									/>
+								)}
+							</div>
 						</div>
 					</div>
 				</div>
 
-				{/* Production Details */}
-				{/* Part # & WO # */}
+				{/* Part & WO */}
 				<div className="grid grid-cols-2 !gap-3">
 					<AssignmentField label="Part Number">
 						<AssignmentInput
@@ -271,17 +296,21 @@ export default function AssignmentDetailsCard({
 					</AssignmentField>
 				</div>
 
-				{/* Op / Batch / Est */}
-				<div className="grid grid-cols-3 !gap-3">
+				{/* Full Row OP # */}
+				<div className="">
 					<AssignmentField label="Op #">
-						<AssignmentInput
-							type="number"
+						<TagInput
 							value={data.opNumber}
-							onChange={(e) => handleChange("opNumber", Number(e.target.value))}
+							onChange={(tags) => handleChange("opNumber", tags)}
+							placeholder="Add operations (e.g. OP10, Turning)..."
 							disabled={readOnly}
+							hasError={!!errors.opNumber}
 						/>
 					</AssignmentField>
+				</div>
 
+				{/* Batch / Est */}
+				<div className="grid grid-cols-2 !gap-3">
 					<AssignmentField label="Batch Qty">
 						<AssignmentInput
 							type="number"
@@ -304,14 +333,15 @@ export default function AssignmentDetailsCard({
 							/>
 							<div
 								onClick={() => !readOnly && setIsUnitDropdownOpen(!isUnitDropdownOpen)}
-								className={`absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center cursor-pointer transition-transform duration-200 ${isUnitDropdownOpen ? "rotate-180" : ""
-									}`}
+								className={`absolute right-1 top-1/2 -translate-y-1/2 w-8 h-8 flex items-center justify-center cursor-pointer transition-transform duration-200 ${
+									isUnitDropdownOpen ? "rotate-180 text-primary" : "text-gray-400"
+								}`}
 							>
-								<span className="material-symbols-outlined text-gray-400 !text-xl">expand_more</span>
+								<span className="material-symbols-outlined !text-xl">expand_more</span>
 							</div>
 
 							{isUnitDropdownOpen && (
-								<div className="absolute right-0 top-full mt-1 w-24 bg-white shadow-lg rounded-lg overflow-hidden z-50 border border-gray-200 animate-in fade-in zoom-in-95 duration-100">
+								<div className="absolute right-0 top-full mt-1 w-24 bg-white shadow-xl rounded-xl overflow-hidden z-50 border border-gray-100 animate-in fade-in zoom-in-95 duration-100 origin-top-right">
 									{["min", "hr"].map((unit) => (
 										<div
 											key={unit}
@@ -319,8 +349,9 @@ export default function AssignmentDetailsCard({
 												handleChange("estUnit", unit);
 												setIsUnitDropdownOpen(false);
 											}}
-											className={`px-3 py-2 text-sm font-medium cursor-pointer transition-colors text-left ${data.estUnit === unit ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50"
-												}`}
+											className={`px-3 py-2 text-sm font-medium cursor-pointer transition-colors text-left ${
+												data.estUnit === unit ? "bg-gray-100 text-gray-900" : "text-gray-600 hover:bg-gray-50"
+											}`}
 										>
 											{unit}
 										</div>
