@@ -5,6 +5,7 @@ import { useRouter, useParams } from "next/navigation";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import { ReasonCodeSelect } from "@/components/ReasonCodeSelect";
+import EmptyState from "@/components/EmptyState";
 import { cn } from "@/lib/utils";
 import Link from "next/link";
 import { useData } from "@/context/DataContext";
@@ -24,18 +25,23 @@ export default function MachineTaggingPage() {
 
 	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID ?? "";
 	const [isLoading, setIsLoading] = useState(!!lhtClusterId && eventsDevices.length === 0);
+	const [isError, setIsError] = useState(false);
 
 	// Fetch devices if not present
 	React.useEffect(() => {
 		if (!lhtClusterId) return;
 		if (eventsDevices.length > 0) return;
+		if (isError) return;
 
 		setIsLoading(true);
 		fetchDeviceList({ clusterId: lhtClusterId })
 			.then(setEventsDevices)
-			.catch(console.error)
+			.catch((e) => {
+				console.error(e);
+				setIsError(true);
+			})
 			.finally(() => setIsLoading(false));
-	}, [lhtClusterId, eventsDevices.length, setEventsDevices]);
+	}, [lhtClusterId, eventsDevices.length, setEventsDevices, isError]);
 
 	const machineName = React.useMemo(() => {
 		const device = eventsDevices.find((d) => d.id === machineId);
@@ -72,11 +78,11 @@ export default function MachineTaggingPage() {
 				// IST 2026-01-17 00:00:00 = UTC 2026-01-16 18:30:00
 				// IST 2026-01-17 23:59:59 = UTC 2026-01-17 18:29:59
 				const [year, month, day] = currentDate.split("-").map(Number);
-				
+
 				// Create UTC dates at midnight for the given day
 				const utcMidnight = Date.UTC(year, month - 1, day, 0, 0, 0, 0);
 				const utcEndOfDay = Date.UTC(year, month - 1, day, 23, 59, 59, 999);
-				
+
 				// Subtract 5.5 hours (IST offset) to get the UTC time that corresponds to IST midnight
 				const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
 				const fromDateUTC = new Date(utcMidnight - IST_OFFSET_MS);
@@ -109,11 +115,11 @@ export default function MachineTaggingPage() {
 				const convertUTCToIST = (utcDate: string): string => {
 					const date = new Date(utcDate);
 					// Use toLocaleString with Asia/Kolkata timezone to get IST time
-					return date.toLocaleString("en-US", { 
+					return date.toLocaleString("en-US", {
 						timeZone: "Asia/Kolkata",
-						hour: "2-digit", 
-						minute: "2-digit", 
-						hour12: false 
+						hour: "2-digit",
+						minute: "2-digit",
+						hour12: false,
 					});
 				};
 
@@ -125,7 +131,7 @@ export default function MachineTaggingPage() {
 						const now = new Date();
 						actualDurationMinutes = (now.getTime() - startTime.getTime()) / (1000 * 60);
 					}
-				
+
 					return {
 						id: `period-${index}`,
 						machineId: machineId,
@@ -166,7 +172,7 @@ export default function MachineTaggingPage() {
 			runningCount: runningPeriods.length,
 			totalRunningMinutes,
 			idleCount: idlePeriods.length,
-			idlePeriods: idlePeriods.map(e => ({ time: `${e.startTime}-${e.endTime}`, duration: e.durationMinutes })),
+			idlePeriods: idlePeriods.map((e) => ({ time: `${e.startTime}-${e.endTime}`, duration: e.durationMinutes })),
 			totalIdleMinutes,
 			offlineCount: offlinePeriods.length,
 			totalOfflineMinutes,
@@ -186,6 +192,7 @@ export default function MachineTaggingPage() {
 	}, [events]);
 
 	// Ensure conditional return is AFTER all hooks
+	// Ensure conditional return is AFTER all hooks
 	if (isLoading) {
 		return (
 			<div className="flex bg-background-dashboard min-h-screen items-center justify-center">
@@ -193,6 +200,8 @@ export default function MachineTaggingPage() {
 			</div>
 		);
 	}
+
+	// Removed early return for isError to preserve header
 
 	// Filter Logic
 	const filteredEvents = events.filter((e) => {
@@ -221,41 +230,57 @@ export default function MachineTaggingPage() {
 				}
 			/>
 
-			<main className="!py-2 px-4 space-y-2 pb-24">
-				{/* Stats Grid */}
-				<section className="grid grid-cols-3 !gap-2">
-					<div className="bg-white !rounded-lg border border-gray-100 shadow-sm !px-3 !py-1.5 flex flex-col justify-center items-start min-h-[52px]">
-						<p className="!text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Total Running</p>
-						<p className="text-xs font-bold text-gray-800 leading-tight">{stats.totalRunning}</p>
-					</div>
-					<div className="bg-white !rounded-lg border border-gray-100 shadow-sm !px-3 !py-1.5 flex flex-col justify-center items-start min-h-[52px]">
-						<p className="!text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Total Idle</p>
-						<p className="text-xs font-bold text-gray-800 leading-tight">{stats.totalIdle}</p>
-					</div>
-					<div className="bg-white !rounded-lg border border-gray-100 shadow-sm !px-3 !py-1.5 flex flex-col justify-center items-start min-h-[52px]">
-						<p className="!text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Offline</p>
-						<p className="text-xs font-bold text-gray-800 leading-tight">{stats.totalOffline}</p>
-					</div>
-				</section>
-
-				{/* Search Bar */}
-				<div className="pb-1">
-					<SearchFilterBar
-						searchQuery={searchQuery}
-						onSearchChange={setSearchQuery}
-						placeholder="Search events..."
-						showFilters={showFilters}
-						onToggleFilters={() => setShowFilters(!showFilters)}
+			{isError ? (
+				<div className="flex-1 flex flex-col items-center justify-center -mt-20">
+					<EmptyState
+						icon="cloud_off"
+						title="Connection Failed"
+						description={
+							<span>
+								Unable to retrieve device data. <br />
+								<span className="text-gray-400 text-xs mt-1 block">Please check your connection.</span>
+							</span>
+						}
+						action={
+							<button
+								onClick={() => setIsError(false)}
+								className="mt-2 h-9 px-6 rounded-lg bg-primary text-white font-bold text-xs shadow-md shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95 uppercase tracking-wide"
+							>
+								Retry
+							</button>
+						}
 					/>
 				</div>
+			) : (
+				<main className="!py-2 px-4 space-y-2 pb-24">
+					{/* Stats Grid */}
+					<section className="grid grid-cols-3 !gap-2">
+						<div className="bg-white !rounded-lg border border-gray-100 shadow-sm !px-3 !py-1.5 flex flex-col justify-center items-start min-h-[52px]">
+							<p className="!text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Total Running</p>
+							<p className="text-xs font-bold text-gray-800 leading-tight">{stats.totalRunning}</p>
+						</div>
+						<div className="bg-white !rounded-lg border border-gray-100 shadow-sm !px-3 !py-1.5 flex flex-col justify-center items-start min-h-[52px]">
+							<p className="!text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Total Idle</p>
+							<p className="text-xs font-bold text-gray-800 leading-tight">{stats.totalIdle}</p>
+						</div>
+						<div className="bg-white !rounded-lg border border-gray-100 shadow-sm !px-3 !py-1.5 flex flex-col justify-center items-start min-h-[52px]">
+							<p className="!text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Offline</p>
+							<p className="text-xs font-bold text-gray-800 leading-tight">{stats.totalOffline}</p>
+						</div>
+					</section>
 
-				{/* Event List */}
-				<div className="space-y-2">
-					<div className="flex items-center justify-between px-1 mb-2">
-						<h2 className="text-[10px] font-bold text-gray-500 uppercase tracking-widest">Detected Events</h2>
-						<span className="bg-gray-100 text-gray-500 text-[10px] font-bold px-2 py-0.5 rounded-md">{filteredEvents.length} Events</span>
+					{/* Search Bar */}
+					<div className="pb-1">
+						<SearchFilterBar
+							searchQuery={searchQuery}
+							onSearchChange={setSearchQuery}
+							placeholder="Search events..."
+							showFilters={showFilters}
+							onToggleFilters={() => setShowFilters(!showFilters)}
+						/>
 					</div>
 
+					{/* Event List */}
 					<div className="space-y-2">
 						{loading ? (
 							<div className="text-center py-12 flex flex-col items-center">
@@ -276,8 +301,8 @@ export default function MachineTaggingPage() {
 							</div>
 						)}
 					</div>
-				</div>
-			</main>
+				</main>
+			)}
 		</div>
 	);
 }

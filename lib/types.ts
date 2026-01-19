@@ -23,6 +23,10 @@ export interface Order {
 	remarks?: string;
 	actualStartTime?: string;
 	actualEndTime?: string;
+
+	// Lighthouse References
+	lhtDeviceId?: string;
+	lhtGroupId?: string;
 }
 
 export const MOCK_INITIAL_ORDERS: Order[] = [

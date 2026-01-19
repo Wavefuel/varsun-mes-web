@@ -27,6 +27,7 @@ export default function StockPage() {
 
 	// Local loading state just for the initial fetch trigger visual
 	const [isLoading, setIsLoading] = useState(false);
+	const [isError, setIsError] = useState(false);
 
 	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID;
 	const lhtAccountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID;
@@ -69,6 +70,11 @@ export default function StockPage() {
 			.catch((error) => console.error(error));
 	}, [stockDevices.length, lighthouseEnabled, lhtClusterId, setStockDevices]);
 
+	// Reset error when date changes
+	useEffect(() => {
+		setIsError(false);
+	}, [currentDate]);
+
 	useEffect(() => {
 		if (!lighthouseEnabled || !lhtClusterId || !lhtAccountId) return;
 
@@ -81,6 +87,8 @@ export default function StockPage() {
 		if (stockDataDate === currentDate && stockOrders) {
 			return;
 		}
+
+		if (isError) return;
 
 		setIsLoading(true);
 
@@ -170,6 +178,7 @@ export default function StockPage() {
 			.catch((error) => {
 				console.error(error);
 				setStockOrders([]);
+				setIsError(true);
 			})
 			.finally(() => setIsLoading(false));
 	}, [
@@ -183,6 +192,7 @@ export default function StockPage() {
 		setStockOrders,
 		setStockDataDate,
 		stockDataDate,
+		isError,
 	]);
 
 	const sourceOrders = useMemo(() => (lighthouseEnabled ? (stockOrders ?? []) : orders), [lighthouseEnabled, orders, stockOrders]);
@@ -243,7 +253,28 @@ export default function StockPage() {
 			</div>
 
 			<main className="px-4 space-y-2 flex-1 flex flex-col">
-				{isLoading || stockDataDate !== currentDate || (lighthouseEnabled && !stockDevices.length) ? (
+				{isError ? (
+					<div className="flex-1 flex flex-col items-center justify-center -mt-20">
+						<EmptyState
+							icon="cloud_off"
+							title="Connection Failed"
+							description={
+								<span>
+									Unable to retrieve stock data. <br />
+									<span className="text-gray-400 text-xs mt-1 block">Please check your connection.</span>
+								</span>
+							}
+							action={
+								<button
+									onClick={() => setIsError(false)}
+									className="mt-2 h-9 px-6 rounded-lg bg-primary text-white font-bold text-xs shadow-md shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95 uppercase tracking-wide"
+								>
+									Retry
+								</button>
+							}
+						/>
+					</div>
+				) : isLoading || stockDataDate !== currentDate || (lighthouseEnabled && !stockDevices.length) ? (
 					<div className="flex-1 flex flex-col justify-center select-none min-h-[50vh]">
 						<Loader />
 					</div>

@@ -31,6 +31,7 @@ export default function EventsPage() {
 	const [searchQuery, setSearchQuery] = useState("");
 	const [showFilters, setShowFilters] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
+	const [isError, setIsError] = useState(false);
 
 	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID ?? "";
 
@@ -38,12 +39,17 @@ export default function EventsPage() {
 		if (!lhtClusterId) return;
 		if (eventsDevices.length > 0) return;
 
+		if (isError) return;
+
 		setIsLoading(true);
 		fetchDeviceList({ clusterId: lhtClusterId })
 			.then(setEventsDevices)
-			.catch(console.error)
+			.catch((e) => {
+				console.error(e);
+				setIsError(true);
+			})
 			.finally(() => setIsLoading(false));
-	}, [lhtClusterId, eventsDevices.length, setEventsDevices]);
+	}, [lhtClusterId, eventsDevices.length, setEventsDevices, isError]);
 
 	const filteredMachines = eventsDevices.filter((m) => {
 		const query = searchQuery.toLowerCase();
@@ -90,7 +96,28 @@ export default function EventsPage() {
 
 			{/* Machines List */}
 			<main className="px-4 space-y-2 flex-1 flex flex-col">
-				{isLoading && !eventsDevices.length ? (
+				{isError ? (
+					<div className="flex-1 flex flex-col items-center justify-center -mt-20">
+						<EmptyState
+							icon="cloud_off"
+							title="Connection Failed"
+							description={
+								<span>
+									Unable to retrieve device data. <br />
+									<span className="text-gray-400 text-xs mt-1 block">Please check your connection.</span>
+								</span>
+							}
+							action={
+								<button
+									onClick={() => setIsError(false)}
+									className="mt-2 h-9 px-6 rounded-lg bg-primary text-white font-bold text-xs shadow-md shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95 uppercase tracking-wide"
+								>
+									Retry
+								</button>
+							}
+						/>
+					</div>
+				) : isLoading && !eventsDevices.length ? (
 					<div className="flex-1 flex flex-col justify-center select-none min-h-[50vh]">
 						<Loader />
 					</div>

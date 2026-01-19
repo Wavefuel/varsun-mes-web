@@ -61,6 +61,7 @@ export default function PlanningPage() {
 
 	// Local loading state just for the initial fetch trigger visual
 	const [isLoading, setIsLoading] = useState(false);
+	const [isError, setIsError] = useState(false);
 
 	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID;
 	const lhtAccountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID;
@@ -112,6 +113,11 @@ export default function PlanningPage() {
 			});
 	}, [planningDevices.length, lighthouseEnabled, lhtClusterId, setPlanningDevices]);
 
+	// Reset error when date changes
+	useEffect(() => {
+		setIsError(false);
+	}, [currentDate]);
+
 	useEffect(() => {
 		if (!lighthouseEnabled || !lhtClusterId || !lhtAccountId) {
 			// Only clear if we really need to, but keeping it persistent is better.
@@ -122,6 +128,8 @@ export default function PlanningPage() {
 		if (lighthouseEnabled && !planningDevices.length) {
 			return;
 		}
+
+		if (isError) return;
 
 		// Check if data is already loaded for this date
 		// Check if data is already loaded for this date
@@ -218,11 +226,12 @@ export default function PlanningPage() {
 			})
 			.catch((error) => {
 				console.error(error);
-				toast.error("Failed to load assignments");
 				setPlanningAssignments([]);
+				setIsError(true);
 			})
 			.finally(() => setIsLoading(false));
 	}, [
+		isError,
 		currentDate,
 		planningDevices,
 		lighthouseEnabled,
@@ -368,7 +377,28 @@ export default function PlanningPage() {
 
 			<main className="px-4 space-y-2 flex-1 flex flex-col">
 				{/* Show loader if we are fetching new data (date mismatch) OR if devices not loaded */}
-				{isLoading || planningDataDate !== currentDate || (lighthouseEnabled && !planningDevices.length) ? (
+				{isError ? (
+					<div className="flex-1 flex flex-col items-center justify-center -mt-20">
+						<EmptyState
+							icon="cloud_off"
+							title="Connection Failed"
+							description={
+								<span>
+									Unable to retrieve planning data. <br />
+									<span className="text-gray-400 text-xs mt-1 block">Please check your connection.</span>
+								</span>
+							}
+							action={
+								<button
+									onClick={() => setIsError(false)}
+									className="mt-2 h-9 px-6 rounded-lg bg-primary text-white font-bold text-xs shadow-md shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95 uppercase tracking-wide"
+								>
+									Retry
+								</button>
+							}
+						/>
+					</div>
+				) : isLoading || planningDataDate !== currentDate || (lighthouseEnabled && !planningDevices.length) ? (
 					<div className="flex-1 flex flex-col justify-center">
 						<Loader />
 					</div>

@@ -6,6 +6,8 @@ import { toast } from "sonner";
 
 import AssignmentDetailsCard, { type AssignmentFormData } from "@/components/AssignmentDetailsCard";
 import { CustomToast } from "@/components/CustomToast";
+import EmptyState from "@/components/EmptyState";
+import Loader from "@/components/Loader";
 import { useData } from "@/context/DataContext";
 import type { Assignment } from "@/lib/types";
 import {
@@ -19,7 +21,7 @@ import {
 } from "@/utils/scripts";
 
 function AssignmentForm() {
-    const router = useRouter();
+	const router = useRouter();
 	const searchParams = useSearchParams();
 
 	const {
@@ -33,6 +35,8 @@ function AssignmentForm() {
 		setPlanningAssignments,
 		setPlanningDataDate,
 		updateOrder,
+		planningDevices,
+		setPlanningDevices,
 	} = useData();
 
 	const orderId = searchParams.get("id");
@@ -44,24 +48,26 @@ function AssignmentForm() {
 	const lhtAccountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID ?? "";
 	const lhtApplicationId = process.env.NEXT_PUBLIC_APPLICATION_ID ?? "";
 
-	const [devices, setDevices] = useState<DeviceSummary[]>([]);
+	const [devices, setDevices] = useState<DeviceSummary[]>(planningDevices);
 	const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
+	const [isLoading, setIsLoading] = useState(true);
+	const [isError, setIsError] = useState(false);
 
-    // Form inputs state
-    const [machine, setMachine] = useState("CNC-042 (Alpha)");
-    const [operator, setOperator] = useState("Marcus Jensen");
+	// Form inputs state
+	const [machine, setMachine] = useState("CNC-042 (Alpha)");
+	const [operator, setOperator] = useState("Marcus Jensen");
 	const [date, setDate] = useState(() => queryDate || currentDate);
 	const [shift, setShift] = useState("Day Shift (S1)");
 	const [startTime, setStartTime] = useState("08:00");
 	const [endTime, setEndTime] = useState("20:00");
-    const [code, setCode] = useState("SH-D24");
-    const [partNumber, setPartNumber] = useState("");
-    const [workOrderId, setWorkOrderId] = useState("");
-    const [opNumber, setOpNumber] = useState(20);
-    const [batch, setBatch] = useState(450);
-    const [estTime, setEstTime] = useState("1.5");
+	const [code, setCode] = useState("SH-D24");
+	const [partNumber, setPartNumber] = useState("");
+	const [workOrderId, setWorkOrderId] = useState("");
+	const [opNumber, setOpNumber] = useState(20);
+	const [batch, setBatch] = useState(450);
+	const [estTime, setEstTime] = useState("1.5");
 	const [estUnit, setEstUnit] = useState<"min" | "hr">("min");
-    const [errors, setErrors] = useState<Record<string, boolean>>({});
+	const [errors, setErrors] = useState<Record<string, boolean>>({});
 
 	// Needed for edit-mode updates (API item id is not the same as group id).
 	const [eventItemId, setEventItemId] = useState<string>("");
@@ -69,32 +75,7 @@ function AssignmentForm() {
 
 	const estPart = useMemo(() => `${estTime}${estUnit === "hr" ? "h" : "m"}`, [estTime, estUnit]);
 
-	const deviceLabel = (device?: DeviceSummary) =>
-		device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
-
-	useEffect(() => {
-		if (!lhtClusterId) return;
-		if (devices.length > 0) return; // Only fetch once
-		fetchDeviceList({ clusterId: lhtClusterId })
-			.then((result) => {
-				setDevices(result);
-				if (!selectedDeviceId) {
-					// Prefer explicit query deviceId (when coming from planning list).
-					const preferred =
-						queryDeviceId && queryDeviceId !== "ALL" ? result.find((d) => d.id === queryDeviceId) : undefined;
-					const pick = preferred ?? result[0];
-					if (pick) {
-						setSelectedDeviceId(pick.id);
-						setMachine(deviceLabel(pick));
-					}
-				}
-			})
-			.catch((error) => {
-				console.error(error);
-				toast.error("Failed to load devices");
-			});
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [lhtClusterId, queryDeviceId]);
+	const deviceLabel = (device?: DeviceSummary) => device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
 
 	const timeToMinutes = (value: string) => {
 		const [h, m] = value.split(":").map((p) => Number(p));
@@ -169,167 +150,199 @@ function AssignmentForm() {
 
 	useEffect(() => {
 		let cancelled = false;
-		(async () => {
-			if (!isEditMode || !orderId) return;
+		const loadData = async () => {
+			if (!lhtClusterId || !lhtAccountId || !lhtApplicationId) {
+				return;
+			}
 
-			// 1) Prefer local storage (if we previously created this order locally).
-			const existing = getOrderById(orderId);
-			if (existing) {
-				if (cancelled) return;
-				setMachine(existing.machine);
-				setOperator(existing.operator);
-				setDate(existing.date);
-				setShift(existing.shift);
-				setStartTime(existing.startTime);
-				setEndTime(existing.endTime);
-				setCode(existing.code || "SH-D24");
-				setPartNumber(existing.partNumber);
-				setWorkOrderId(existing.id);
-				setOpNumber(existing.opNumber || 20);
-				setBatch(existing.batch || 450);
+			setIsLoading(true);
 
-				const parsedEst = existing.estPart || "1.5m";
-				if (parsedEst.endsWith("h")) {
-					setEstUnit("hr");
-					setEstTime(parsedEst.replace(/h$/, ""));
-				} else {
-					setEstUnit("min");
-					setEstTime(parsedEst.replace(/m$/, ""));
+			try {
+				// 1. Fetch Devices (Always needed)
+				// We fetch this first so we can resolve device labels/IDs for the assignment.
+				let deviceList = devices;
+				if (deviceList.length === 0) {
+					deviceList = await fetchDeviceList({ clusterId: lhtClusterId });
+					if (cancelled) return;
+					setDevices(deviceList);
+					setPlanningDevices(deviceList);
 				}
 
-				if (existing.lhtDeviceId) setSelectedDeviceId(existing.lhtDeviceId);
-				return;
+				// 2. Handle Create Mode (Default Selection) vs Edit Mode (Load Order)
+				if (!isEditMode || !orderId) {
+					// --- CREATE MODE ---
+					// Set default device selection if none selected
+					if (deviceList.length > 0) {
+						// Prefer explicit query deviceId (when coming from planning list).
+						const preferred = queryDeviceId && queryDeviceId !== "ALL" ? deviceList.find((d) => d.id === queryDeviceId) : undefined;
+						const pick = preferred ?? deviceList[0];
+
+						// Only set if we haven't already selected one (or if we want to force query param adherence)
+						// Since this effect runs on mount, taking the query param is correct.
+						if (pick) {
+							setSelectedDeviceId((prev) => prev || pick.id);
+							setMachine((prev) => (prev === "CNC-042 (Alpha)" && pick.id !== "CNC-042 (Alpha)" ? deviceLabel(pick) : prev));
+						}
+					}
+					setIsLoading(false);
+					return;
+				}
+
+				// --- EDIT MODE ---
+				// Try fetching local first
+				const existing = getOrderById(orderId);
+				if (existing) {
+					setMachine(existing.machine);
+					setOperator(existing.operator);
+					setDate(existing.date);
+					setShift(existing.shift);
+					setStartTime(existing.startTime);
+					setEndTime(existing.endTime);
+					setCode(existing.code || "SH-D24");
+					setPartNumber(existing.partNumber);
+					setWorkOrderId(existing.id);
+					setOpNumber(existing.opNumber || 20);
+					setBatch(existing.batch || 450);
+
+					const parsedEst = existing.estPart || "1.5m";
+					if (parsedEst.endsWith("h")) {
+						setEstUnit("hr");
+						setEstTime(parsedEst.replace(/h$/, ""));
+					} else {
+						setEstUnit("min");
+						setEstTime(parsedEst.replace(/m$/, ""));
+					}
+
+					if (existing.lhtDeviceId) setSelectedDeviceId(existing.lhtDeviceId);
+					setIsLoading(false);
+					return;
+				}
+
+				// API fallback
+				const selectedDate = queryDate || date || currentDate;
+				const range = toIsoDayRange(selectedDate);
+				if (!range) {
+					throw new Error("Invalid date");
+				}
+
+				const groupsUnknown = await readDeviceStateEventGroupsWithItemsByCluster({
+					clusterId: lhtClusterId,
+					applicationId: lhtApplicationId,
+					account: { id: lhtAccountId },
+					query: { rangeStart: range.rangeStart, rangeEnd: range.rangeEnd },
+					deviceId: queryDeviceId && queryDeviceId !== "ALL" ? queryDeviceId : undefined,
+				});
+
+				type ApiEventItem = {
+					id?: string;
+					segmentStart?: string | null;
+					segmentEnd?: string | null;
+					metadata?: Record<string, unknown> | null;
+				};
+				type ApiEventGroup = {
+					id?: string;
+					deviceId?: string;
+					rangeStart?: string | null;
+					rangeEnd?: string | null;
+					Items?: ApiEventItem[] | null;
+				};
+
+				const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
+				const foundGroup =
+					groups.find((g) => String(g?.id ?? "") === orderId) ??
+					groups.find((g) =>
+						(Array.isArray(g?.Items) ? g.Items : []).some((entry) => {
+							const md = entry?.metadata as Record<string, unknown> | undefined;
+							return String(md?.workOrder ?? "") === orderId;
+						}),
+					) ??
+					null;
+
+				if (!foundGroup) {
+					toast.error("Order not found");
+					router.push("/planning");
+					return;
+				}
+
+				const item = Array.isArray(foundGroup.Items) ? foundGroup.Items[0] : null;
+				const metadata = item?.metadata ?? {};
+				setEventGroupId(String(foundGroup.id ?? ""));
+
+				const foundDeviceId = String(foundGroup.deviceId ?? "");
+				const foundDevice = deviceList.find((d) => d.id === foundDeviceId);
+				const label = foundDevice ? deviceLabel(foundDevice) : foundDeviceId || "Unknown Device";
+
+				const rs = typeof foundGroup.rangeStart === "string" ? new Date(foundGroup.rangeStart) : null;
+				const re = typeof foundGroup.rangeEnd === "string" ? new Date(foundGroup.rangeEnd) : null;
+				const isNight = rs && re && rs.toDateString() !== re.toDateString();
+
+				const m = metadata as Record<string, unknown>;
+				const workOrder = String(m.workOrder ?? "");
+				const pn = String(m.partNumber ?? "");
+				const oc = String(m.operatorCode ?? "");
+				const b = Number(m.opBatchQty ?? 450);
+				const ep = String(m.estPartAdd ?? "1.5m");
+
+				if (cancelled) return;
+				setSelectedDeviceId(foundDeviceId);
+				setMachine(label);
+				setDate(selectedDate);
+				setShift(isNight ? "Night Shift (S2)" : "Day Shift (S1)");
+				setStartTime(toTimeHHMM(item?.segmentStart ?? null) || "08:00");
+				setEndTime(toTimeHHMM(item?.segmentEnd ?? null) || "20:00");
+				setCode(oc || "SH-D24");
+				setPartNumber(pn);
+				setWorkOrderId(workOrder);
+				setBatch(Number.isFinite(b) ? b : 450);
+				setEventItemId(String(item?.id ?? ""));
+
+				if (ep.endsWith("h")) {
+					setEstUnit("hr");
+					setEstTime(ep.replace(/h$/, ""));
+				} else {
+					setEstUnit("min");
+					setEstTime(ep.replace(/m$/, ""));
+				}
+			} catch (e) {
+				console.error(e);
+				setIsError(true);
+			} finally {
+				if (!cancelled) setIsLoading(false);
 			}
+		};
 
-			// 2) API fallback (load group + item from Lighthouse).
-			if (!lhtClusterId || !lhtAccountId || !lhtApplicationId) {
-				toast.error("Missing Lighthouse configuration");
-				router.push("/planning");
-				return;
-			}
-
-			const selectedDate = queryDate || date || currentDate;
-			const range = toIsoDayRange(selectedDate);
-			if (!range) {
-				toast.error("Invalid date");
-				router.push("/planning");
-				return;
-			}
-
-			const deviceList = devices.length ? devices : await fetchDeviceList({ clusterId: lhtClusterId });
-			if (!cancelled && !devices.length) setDevices(deviceList);
-
-			const groupsUnknown = await readDeviceStateEventGroupsWithItemsByCluster({
-				clusterId: lhtClusterId,
-				applicationId: lhtApplicationId,
-				account: { id: lhtAccountId },
-				query: { rangeStart: range.rangeStart, rangeEnd: range.rangeEnd },
-				deviceId: queryDeviceId && queryDeviceId !== "ALL" ? queryDeviceId : undefined,
-			});
-
-			type ApiEventItem = {
-				id?: string;
-				segmentStart?: string | null;
-				segmentEnd?: string | null;
-				metadata?: Record<string, unknown> | null;
-			};
-			type ApiEventGroup = {
-				id?: string;
-				deviceId?: string;
-				rangeStart?: string | null;
-				rangeEnd?: string | null;
-				Items?: ApiEventItem[] | null;
-			};
-
-			const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
-			const foundGroup =
-				groups.find((g) => String(g?.id ?? "") === orderId) ??
-				groups.find((g) =>
-					(Array.isArray(g?.Items) ? g.Items : []).some((entry) => {
-						const md = entry?.metadata as Record<string, unknown> | undefined;
-						return String(md?.workOrder ?? "") === orderId;
-					}),
-				) ??
-				null;
-			if (!foundGroup) {
-				toast.error("Order not found");
-				router.push("/planning");
-				return;
-			}
-
-			const item = Array.isArray(foundGroup.Items) ? foundGroup.Items[0] : null;
-			const metadata = item?.metadata ?? {};
-			setEventGroupId(String(foundGroup.id ?? ""));
-
-			const foundDeviceId = String(foundGroup.deviceId ?? "");
-			const foundDevice = deviceList.find((d) => d.id === foundDeviceId);
-			const label = foundDevice ? deviceLabel(foundDevice) : foundDeviceId || "Unknown Device";
-
-			const rs = typeof foundGroup.rangeStart === "string" ? new Date(foundGroup.rangeStart) : null;
-			const re = typeof foundGroup.rangeEnd === "string" ? new Date(foundGroup.rangeEnd) : null;
-			const isNight = rs && re && rs.toDateString() !== re.toDateString();
-
-			const m = metadata as Record<string, unknown>;
-			const workOrder = String(m.workOrder ?? "");
-			const pn = String(m.partNumber ?? "");
-			const oc = String(m.operatorCode ?? "");
-			const b = Number(m.opBatchQty ?? 450);
-			const ep = String(m.estPartAdd ?? "1.5m");
-
-			if (cancelled) return;
-			setSelectedDeviceId(foundDeviceId);
-			setMachine(label);
-			setDate(selectedDate);
-			setShift(isNight ? "Night Shift (S2)" : "Day Shift (S1)");
-			setStartTime(toTimeHHMM(item?.segmentStart ?? null) || "08:00");
-			setEndTime(toTimeHHMM(item?.segmentEnd ?? null) || "20:00");
-			setCode(oc || "SH-D24");
-			setPartNumber(pn);
-			setWorkOrderId(workOrder);
-			setBatch(Number.isFinite(b) ? b : 450);
-			setEventItemId(String(item?.id ?? ""));
-
-			if (ep.endsWith("h")) {
-				setEstUnit("hr");
-				setEstTime(ep.replace(/h$/, ""));
-			} else {
-				setEstUnit("min");
-				setEstTime(ep.replace(/m$/, ""));
-			}
-		})().catch((e) => {
-			console.error(e);
-			toast.error("Failed to load assignment");
-			router.push("/planning");
-		});
+		loadData();
 
 		return () => {
 			cancelled = true;
 		};
 	}, [
-		currentDate,
-		date,
-		devices,
-		getOrderById,
+		// Only depend on ID/Mode changes and stable env vars.
+		// NOT date or devices state, preventing loops.
 		isEditMode,
+		orderId,
+		lhtClusterId,
 		lhtAccountId,
 		lhtApplicationId,
-		lhtClusterId,
-		orderId,
-		queryDate,
 		queryDeviceId,
+		// queryDate might change, so we include it.
+		// If user navigates to same page with different date content, we should reload.
+		queryDate,
+		getOrderById,
 		router,
+		currentDate, // used as fallback for date
 	]);
 
-    const handleSave = async () => {
-        const newErrors: Record<string, boolean> = {};
-        if (!partNumber) newErrors.partNumber = true;
-        if (!workOrderId) newErrors.workOrderId = true;
+	const handleSave = async () => {
+		const newErrors: Record<string, boolean> = {};
+		if (!partNumber) newErrors.partNumber = true;
+		if (!workOrderId) newErrors.workOrderId = true;
 
-        if (Object.keys(newErrors).length > 0) {
-            setErrors(newErrors);
-            toast.error("Please complete all required fields");
-            return;
-        }
+		if (Object.keys(newErrors).length > 0) {
+			setErrors(newErrors);
+			toast.error("Please complete all required fields");
+			return;
+		}
 
 		const groupWindow = getShiftWindow(shift);
 		const groupRange = buildSegmentRangeIso(date, groupWindow.start, groupWindow.end);
@@ -381,8 +394,15 @@ function AssignmentForm() {
 						title="Capacity Limit Exceeded"
 						message={
 							<span>
-								Required time <span className="font-bold">{reqHrs}h {reqMins}m</span> exceeds shift duration{" "}
-								<span className="font-bold">{shiftHrs}h {shiftMins}m</span>.
+								Required time{" "}
+								<span className="font-bold">
+									{reqHrs}h {reqMins}m
+								</span>{" "}
+								exceeds shift duration{" "}
+								<span className="font-bold">
+									{shiftHrs}h {shiftMins}m
+								</span>
+								.
 							</span>
 						}
 						actions="Try reducing Batch Qty/Est. Part or extending Shift."
@@ -496,29 +516,29 @@ function AssignmentForm() {
 					} else {
 						const created = await createDeviceStateEventGroup({
 							deviceId: selectedDeviceId,
-                clusterId: lhtClusterId,
+							clusterId: lhtClusterId,
 							applicationId: lhtApplicationId,
-                account: { id: lhtAccountId },
-                body: {
+							account: { id: lhtAccountId },
+							body: {
 								// Shift-wise group range (not full day)
 								rangeStart: groupRange.start,
 								rangeEnd: groupRange.end,
 								title: `PLANNED-${date}`,
-                    items: [
-                        {
+								items: [
+									{
 										segmentStart: itemSegment.start,
 										segmentEnd: itemSegment.end,
 										category: "PLANNED",
-                            operatorCode: code,
-                            partNumber,
-                            workOrder: workOrderId,
-                            opBatchQty: batch,
-                            estPartAdd: estPart,
-                        },
-                    ],
-                },
-            });
-					lhtItemId = extractCreatedItemId(created, itemSegment.start);
+										operatorCode: code,
+										partNumber,
+										workOrder: workOrderId,
+										opBatchQty: batch,
+										estPartAdd: estPart,
+									},
+								],
+							},
+						});
+						lhtItemId = extractCreatedItemId(created, itemSegment.start);
 
 						if (created && typeof created === "object") {
 							const maybeCreated = created as Record<string, unknown>;
@@ -529,10 +549,10 @@ function AssignmentForm() {
 						}
 					}
 				}
-        } catch (error) {
-            console.error(error);
+			} catch (error) {
+				console.error(error);
 				toast.error(isEditMode ? "Failed to update assignment" : "Failed to save assignment");
-            return;
+				return;
 			}
 		} else {
 			toast.message("Saved locally (Lighthouse not configured)");
@@ -609,61 +629,77 @@ function AssignmentForm() {
 		[batch, code, date, endTime, estTime, estUnit, machine, opNumber, operator, partNumber, shift, startTime, workOrderId],
 	);
 
-	const handleFormChange = useCallback((field: keyof AssignmentFormData, value: unknown) => {
-		switch (field) {
-			case "machine":
-				setMachine(value as string);
-				break;
-			case "operator":
-				setOperator(value as string);
-				break;
-			case "date":
-				setDate(value as string);
-				break;
-			case "shift":
-				setShift(value as string);
-				break;
-			case "startTime":
-				setStartTime(value as string);
-				break;
-			case "endTime":
-				setEndTime(value as string);
-				break;
-			case "code":
-				setCode(value as string);
-				break;
-			case "partNumber":
-				setPartNumber(value as string);
-				if (errors.partNumber) setErrors((prev) => ({ ...prev, partNumber: false }));
-				break;
-			case "workOrderId":
-				setWorkOrderId(value as string);
-				if (errors.workOrderId) setErrors((prev) => ({ ...prev, workOrderId: false }));
-				break;
-			case "opNumber":
-				setOpNumber(value as number);
-				break;
-			case "batch":
-				setBatch(value as number);
-				if (errors.capacity) setErrors((prev) => { const next = { ...prev }; delete next.capacity; return next; });
-				break;
-			case "estTime":
-				setEstTime(value as string);
-				if (errors.capacity) setErrors((prev) => { const next = { ...prev }; delete next.capacity; return next; });
-				break;
-			case "estUnit":
-				setEstUnit(value as "min" | "hr");
-				break;
-		}
-	}, [errors.capacity, errors.partNumber, errors.workOrderId]);
+	const handleFormChange = useCallback(
+		(field: keyof AssignmentFormData, value: unknown) => {
+			switch (field) {
+				case "machine":
+					setMachine(value as string);
+					break;
+				case "operator":
+					setOperator(value as string);
+					break;
+				case "date":
+					setDate(value as string);
+					break;
+				case "shift":
+					setShift(value as string);
+					break;
+				case "startTime":
+					setStartTime(value as string);
+					break;
+				case "endTime":
+					setEndTime(value as string);
+					break;
+				case "code":
+					setCode(value as string);
+					break;
+				case "partNumber":
+					setPartNumber(value as string);
+					if (errors.partNumber) setErrors((prev) => ({ ...prev, partNumber: false }));
+					break;
+				case "workOrderId":
+					setWorkOrderId(value as string);
+					if (errors.workOrderId) setErrors((prev) => ({ ...prev, workOrderId: false }));
+					break;
+				case "opNumber":
+					setOpNumber(value as number);
+					break;
+				case "batch":
+					setBatch(value as number);
+					if (errors.capacity)
+						setErrors((prev) => {
+							const next = { ...prev };
+							delete next.capacity;
+							return next;
+						});
+					break;
+				case "estTime":
+					setEstTime(value as string);
+					if (errors.capacity)
+						setErrors((prev) => {
+							const next = { ...prev };
+							delete next.capacity;
+							return next;
+						});
+					break;
+				case "estUnit":
+					setEstUnit(value as "min" | "hr");
+					break;
+			}
+		},
+		[errors.capacity, errors.partNumber, errors.workOrderId],
+	);
 
-	const handleDeviceChange = useCallback((deviceId: string) => {
-		setSelectedDeviceId(deviceId);
-		const device = devices.find((d) => d.id === deviceId);
-		setMachine(deviceLabel(device));
-	}, [devices]);
+	const handleDeviceChange = useCallback(
+		(deviceId: string) => {
+			setSelectedDeviceId(deviceId);
+			const device = devices.find((d) => d.id === deviceId);
+			setMachine(deviceLabel(device));
+		},
+		[devices],
+	);
 
-    return (
+	return (
 		<div className="flex flex-col min-h-screen bg-background-dashboard font-display">
 			<header className="sticky top-0 z-50 bg-white border-b border-gray-200 h-(--header-height) px-4 py-2">
 				<div className="flex items-center justify-between h-full">
@@ -672,91 +708,136 @@ function AssignmentForm() {
 						<p className="header-subtitle mt-0.5 uppercase block">Planning</p>
 					</div>
 					<div className="flex items-center gap-3">
-						<button
-							onClick={() => router.back()}
-							className="text-gray-500 font-bold text-xs uppercase hover:text-gray-700 active:scale-95 transition-transform"
-						>
-							Cancel
-                        </button>
-                    <button
-                        onClick={handleSave}
-							className="bg-primary text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow-sm active:scale-95 transition-transform"
-                    >
-                        SAVE
-                    </button>
+						{isError ? (
+							<button
+								onClick={() => router.back()}
+								className="text-gray-500 font-bold text-xs uppercase hover:text-gray-700 active:scale-95 transition-transform"
+							>
+								Back
+							</button>
+						) : (
+							<>
+								<button
+									onClick={() => router.back()}
+									className="text-gray-500 font-bold text-xs uppercase hover:text-gray-700 active:scale-95 transition-transform"
+								>
+									Cancel
+								</button>
+								<button
+									onClick={handleSave}
+									className="bg-primary text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow-sm active:scale-95 transition-transform"
+								>
+									SAVE
+								</button>
+							</>
+						)}
 					</div>
-                </div>
-            </header>
+				</div>
+			</header>
 
-            <main className="p-4 space-y-6 pb-24">
-				<AssignmentDetailsCard
-					title={isEditMode ? "Assignment Details" : "New Assignment"}
-					icon={isEditMode ? "edit_note" : "precision_manufacturing"}
-					data={formData}
-					onChange={handleFormChange}
-					errors={errors}
-					readOnly={false}
-					isEditMode={isEditMode}
-					devices={devices}
-					selectedDeviceId={selectedDeviceId}
-					onDeviceChange={handleDeviceChange}
-				/>
+			{isError ? (
+				<div className="flex-1 flex flex-col items-center justify-center -mt-20">
+					<EmptyState
+						icon="cloud_off"
+						title="Connection Failed"
+						description={
+							<span>
+								Unable to retrieve assignment data. <br />
+								<span className="text-gray-400 text-xs mt-1 block">Please check your connection.</span>
+							</span>
+						}
+						action={
+							<button
+								onClick={() => window.location.reload()}
+								className="mt-2 h-9 px-6 rounded-lg bg-primary text-white font-bold text-xs shadow-md shadow-primary/20 hover:bg-primary/90 transition-all active:scale-95 uppercase tracking-wide"
+							>
+								Retry
+							</button>
+						}
+					/>
+				</div>
+			) : (
+				<main className="p-4 space-y-6 pb-24 relative">
+					<AssignmentDetailsCard
+						title={isEditMode ? "Assignment Details" : "New Assignment"}
+						icon={isEditMode ? "edit_note" : "precision_manufacturing"}
+						data={formData}
+						onChange={handleFormChange}
+						errors={errors}
+						readOnly={false}
+						isEditMode={isEditMode}
+						devices={devices}
+						selectedDeviceId={selectedDeviceId}
+						onDeviceChange={handleDeviceChange}
+					/>
 
-				{!isEditMode && (
-					<section className="space-y-2">
-                    <div className="flex items-center justify-between px-1">
-							<h3 className="font-bold text-sm uppercase tracking-wider text-gray-600">
-								Planned Queue <span className="text-gray-400 normal-case tracking-normal">({machine.split(" ")[0]})</span>
-							</h3>
-                        <span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded">
-								{orders.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED").length} Tasks
-                        </span>
-                    </div>
-                    <div className="space-y-2">
-							{orders
-								.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED")
-                            .sort((a, b) => a.startTime.localeCompare(b.startTime))
-                            .map((order) => (
-                                <div key={order.id} className="bg-white border border-gray-100 p-3 rounded-lg flex items-center gap-3">
-                                    <div className="size-10 bg-gray-100 rounded flex items-center justify-center shrink-0 text-gray-400">
-                                        <span className="material-symbols-outlined text-xl">
-												{order.status === "ACTIVE" ? "play_circle" : order.status === "COMPLETED" ? "check_circle" : "schedule"}
-                                        </span>
-                                    </div>
-                                    <div className="flex-1 min-w-0">
-                                        <div className="flex justify-between items-start">
-												<p className="font-bold text-sm truncate text-gray-800">
-													{order.id} • {order.partNumber}
-												</p>
-												<span
-													className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${order.status === "ACTIVE"
-														? "text-green-600 bg-green-50"
+					{isLoading && (
+						<div className="absolute inset-0 z-50 bg-white/50 backdrop-blur-sm flex items-center justify-center">
+							<Loader />
+						</div>
+					)}
+
+					{!isEditMode && (
+						<section className="space-y-2">
+							<div className="flex items-center justify-between px-1">
+								<h3 className="font-bold text-sm uppercase tracking-wider text-gray-600">
+									Planned Queue <span className="text-gray-400 normal-case tracking-normal">({machine.split(" ")[0]})</span>
+								</h3>
+								<span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded">
+									{orders.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED").length} Tasks
+								</span>
+							</div>
+							<div className="space-y-2">
+								{orders
+									.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED")
+									.sort((a, b) => a.startTime.localeCompare(b.startTime))
+									.map((order) => (
+										<div key={order.id} className="bg-white border border-gray-100 p-3 rounded-lg flex items-center gap-3">
+											<div className="size-10 bg-gray-100 rounded flex items-center justify-center shrink-0 text-gray-400">
+												<span className="material-symbols-outlined text-xl">
+													{order.status === "ACTIVE"
+														? "play_circle"
 														: order.status === "COMPLETED"
-															? "text-blue-600 bg-blue-50"
-															: "text-gray-400 bg-gray-50"
+															? "check_circle"
+															: "schedule"}
+												</span>
+											</div>
+											<div className="flex-1 min-w-0">
+												<div className="flex justify-between items-start">
+													<p className="font-bold text-sm truncate text-gray-800">
+														{order.id} • {order.partNumber}
+													</p>
+													<span
+														className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+															order.status === "ACTIVE"
+																? "text-green-600 bg-green-50"
+																: order.status === "COMPLETED"
+																	? "text-blue-600 bg-blue-50"
+																	: "text-gray-400 bg-gray-50"
 														}`}
-												>
-                                                {order.status}
-                                            </span>
-                                        </div>
-											<p className="text-[11px] text-gray-500 font-medium">
-												Op {order.opNumber} • {order.operator.split(" ")[0]} • {order.shift}
-                                        </p>
-                                    </div>
-                                </div>
-                            ))}
+													>
+														{order.status}
+													</span>
+												</div>
+												<p className="text-[11px] text-gray-500 font-medium">
+													Op {order.opNumber} • {order.operator.split(" ")[0]} • {order.shift}
+												</p>
+											</div>
+										</div>
+									))}
 
-							{orders.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED").length === 0 && (
-                            <div className="text-center py-6 text-gray-400 text-xs italic bg-gray-50/50 rounded-lg border border-dashed border-gray-200">
-									No active queue for {machine.split(" ")[0]} on this date.
-                            </div>
-                        )}
-                    </div>
-                </section>
-				)}
-            </main>
-        </div>
-    );
+								{orders.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED").length === 0 && (
+									<div className="text-center py-6 text-gray-400 text-xs italic bg-gray-50/50 rounded-lg border border-dashed border-gray-200">
+										No active queue for {machine.split(" ")[0]} on this date.
+									</div>
+								)}
+							</div>
+						</section>
+					)}
+				</main>
+			)}
+		</div>
+	);
 }
 
 export default function CreateAssignmentPage() {
@@ -764,5 +845,5 @@ export default function CreateAssignmentPage() {
 		<Suspense fallback={<div>Loading...</div>}>
 			<AssignmentForm />
 		</Suspense>
-    );
+	);
 }
