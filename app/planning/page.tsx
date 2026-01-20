@@ -215,7 +215,7 @@ export default function PlanningPage() {
 						const startTimeValue = formatTimeValue(item?.segmentStart ?? undefined);
 						const endTimeValue = formatTimeValue(item?.segmentEnd ?? undefined);
 						const category = typeof item?.category === "string" ? String(item.category).toUpperCase() : "";
-						const status: Order["status"] = category === "COMPLETED" ? "COMPLETED" : "PLANNED";
+						const status: Order["status"] = category === "ACTUAL_OUTPUT" ? "ACTUAL_OUTPUT" : "PLANNED_OUTPUT";
 						const groupId = String(group?.id ?? workOrder);
 						const itemId = String(item?.id ?? "");
 
@@ -290,7 +290,7 @@ export default function PlanningPage() {
 		// but let's keep it consistent.
 
 		// Planning list should hide completed items.
-		if ((item.status as string) === "COMPLETED") return false;
+		if ((item.status as string) === "ACTUAL_OUTPUT") return false;
 
 		const matchesSearch =
 			item.machine.toLowerCase().includes(searchQuery.toLowerCase()) ||
@@ -484,9 +484,9 @@ export default function PlanningPage() {
 												<span
 													className={cn(
 														"inline-block ml-2 size-2 rounded-full mb-0.5",
-														item.status === "PLANNED"
+														item.status === "PLANNED_OUTPUT"
 															? "bg-status-planned"
-															: item.status === "COMPLETED"
+															: item.status === "ACTUAL_OUTPUT"
 																? "bg-status-completed"
 																: "bg-status-default",
 													)}

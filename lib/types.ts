@@ -1,4 +1,4 @@
-export type OrderStatus = "PLANNED" | "ACTIVE" | "COMPLETED";
+export type OrderStatus = "PLANNED_OUTPUT" | "ACTIVE" | "ACTUAL_OUTPUT";
 
 export interface Order {
 	id: string;
@@ -44,7 +44,7 @@ export const MOCK_INITIAL_ORDERS: Order[] = [
 		batch: 450,
 		estPart: "1.5m",
 		target: 450,
-		status: "PLANNED",
+		status: "PLANNED_OUTPUT",
 	},
 	{
 		id: "WO-98765",
@@ -60,7 +60,7 @@ export const MOCK_INITIAL_ORDERS: Order[] = [
 		batch: 500,
 		estPart: "4.5m",
 		target: 500,
-		status: "COMPLETED",
+		status: "ACTUAL_OUTPUT",
 		actualOutput: 498,
 		toolChanges: 1,
 		rejects: 0,
@@ -79,7 +79,7 @@ export const MOCK_INITIAL_ORDERS: Order[] = [
 		batch: 120,
 		estPart: "8.0m",
 		target: 120,
-		status: "PLANNED",
+		status: "PLANNED_OUTPUT",
 	},
 ];
 

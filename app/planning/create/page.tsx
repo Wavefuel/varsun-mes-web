@@ -264,7 +264,7 @@ function AssignmentForm() {
 							const startTimeValue = toTimeHHMM(item?.segmentStart ?? null);
 							const endTimeValue = toTimeHHMM(item?.segmentEnd ?? null);
 							const category = typeof item?.category === "string" ? String(item.category).toUpperCase() : "";
-							const status: Assignment["status"] = category === "COMPLETED" ? "COMPLETED" : "PLANNED";
+							const status: Assignment["status"] = category === "ACTUAL_OUTPUT" ? "ACTUAL_OUTPUT" : "PLANNED_OUTPUT";
 
 							const rawOp = metadata.opNumber ?? "0";
 							const op = Array.isArray(rawOp) ? rawOp.map(String) : [String(rawOp)];
@@ -658,7 +658,7 @@ function AssignmentForm() {
 							group: {
 								rangeStart: groupRange.start,
 								rangeEnd: groupRange.end,
-								title: `PLANNED-${date}`,
+								title: `PLANNED_OUTPUT-${date}`,
 							},
 							items: {
 								update: [
@@ -666,9 +666,15 @@ function AssignmentForm() {
 										id: eventItemId,
 										segmentStart: itemSegment.start,
 										segmentEnd: itemSegment.end,
-										category: "PLANNED",
+										category: "PLANNED_OUTPUT",
 										operatorCode: code,
-										metadata: { operatorName: operator, operator: operator, name: operator, opNumber },
+										metadata: {
+											operatorName: operator,
+											operator: operator,
+											name: operator,
+											opNumber,
+											annotationType: "PLANNING",
+										},
 										partNumber,
 										workOrder: workOrderId,
 										opBatchQty: batch,
@@ -724,9 +730,9 @@ function AssignmentForm() {
 								{
 									segmentStart: itemSegment.start,
 									segmentEnd: itemSegment.end,
-									category: "PLANNED",
+									category: "PLANNED_OUTPUT",
 									operatorCode: code,
-									metadata: { operatorName: operator, operator: operator, name: operator, opNumber },
+									metadata: { operatorName: operator, operator: operator, name: operator, opNumber, annotationType: "PLANNING" },
 									partNumber,
 									workOrder: workOrderId,
 									opBatchQty: batch,
@@ -747,14 +753,20 @@ function AssignmentForm() {
 								// Shift-wise group range (not full day)
 								rangeStart: groupRange.start,
 								rangeEnd: groupRange.end,
-								title: `PLANNED-${date}`,
+								title: `PLANNED_OUTPUT-${date}`,
 								items: [
 									{
 										segmentStart: itemSegment.start,
 										segmentEnd: itemSegment.end,
-										category: "PLANNED",
+										category: "PLANNED_OUTPUT",
 										operatorCode: code,
-										metadata: { operatorName: operator, operator: operator, name: operator, opNumber },
+										metadata: {
+											operatorName: operator,
+											operator: operator,
+											name: operator,
+											opNumber,
+											annotationType: "PLANNING",
+										},
 										partNumber,
 										workOrder: workOrderId,
 										opBatchQty: batch,
@@ -797,7 +809,7 @@ function AssignmentForm() {
 			batch,
 			estPart,
 			target: batch,
-			status: "PLANNED" as const,
+			status: "PLANNED_OUTPUT" as const,
 			lhtDeviceId,
 			lhtGroupId,
 		};
@@ -1026,12 +1038,12 @@ function AssignmentForm() {
 									Planned Queue <span className="text-gray-400 normal-case tracking-normal">({machine.split(" ")[0]})</span>
 								</h3>
 								<span className="text-[10px] font-bold bg-primary/10 text-primary px-2 py-0.5 rounded">
-									{queueSource.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED").length} Tasks
+									{queueSource.filter((o) => o.machine === machine && o.date === date && o.status !== "ACTUAL_OUTPUT").length} Tasks
 								</span>
 							</div>
 							<div className="space-y-2">
 								{queueSource
-									.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED")
+									.filter((o) => o.machine === machine && o.date === date && o.status !== "ACTUAL_OUTPUT")
 									.sort((a, b) => a.startTime.localeCompare(b.startTime))
 									.map((order) => {
 										// Compatible ID for display
@@ -1042,7 +1054,7 @@ function AssignmentForm() {
 													<span className="material-symbols-outlined text-xl">
 														{order.status === "ACTIVE"
 															? "play_circle"
-															: order.status === "COMPLETED"
+															: order.status === "ACTUAL_OUTPUT"
 																? "check_circle"
 																: "schedule"}
 													</span>
@@ -1056,7 +1068,7 @@ function AssignmentForm() {
 															className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
 																order.status === "ACTIVE"
 																	? "text-green-600 bg-green-50"
-																	: order.status === "COMPLETED"
+																	: order.status === "ACTUAL_OUTPUT"
 																		? "text-blue-600 bg-blue-50"
 																		: "text-gray-400 bg-gray-50"
 															}`}
@@ -1072,7 +1084,7 @@ function AssignmentForm() {
 										);
 									})}
 
-								{queueSource.filter((o) => o.machine === machine && o.date === date && o.status !== "COMPLETED").length === 0 && (
+								{queueSource.filter((o) => o.machine === machine && o.date === date && o.status !== "ACTUAL_OUTPUT").length === 0 && (
 									<div className="text-center py-6 text-gray-400 text-xs italic bg-gray-50/50 rounded-lg border border-dashed border-gray-200">
 										No active queue for {machine.split(" ")[0]} on this date.
 									</div>

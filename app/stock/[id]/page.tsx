@@ -73,7 +73,7 @@ function StockEntryForm() {
 		if (orderFromContext?.status) {
 			return orderFromContext.status.toUpperCase();
 		}
-		return "PLANNED";
+		return "PLANNED_OUTPUT";
 	});
 	// Initialize eventGroupId from context if available
 	const [eventGroupId, setEventGroupId] = useState<string>(() => orderFromContext?.lhtGroupId ?? "");
@@ -274,7 +274,7 @@ function StockEntryForm() {
 				const foundGroup =
 					matchingGroups.find((g) => {
 						const item = Array.isArray(g.Items) ? g.Items[0] : null;
-						return String(item?.category || "").toUpperCase() === "COMPLETED";
+						return String(item?.category || "").toUpperCase() === "ACTUAL_OUTPUT";
 					}) ??
 					matchingGroups[0] ??
 					null;
@@ -290,7 +290,7 @@ function StockEntryForm() {
 				const item = Array.isArray(foundGroup.Items) ? foundGroup.Items[0] : null;
 				const metadata = item?.metadata ?? {};
 				const category = typeof item?.category === "string" ? String(item.category).toUpperCase() : "";
-				const status: Order["status"] = category === "COMPLETED" ? "COMPLETED" : "PLANNED";
+				const status: Order["status"] = category === "ACTUAL_OUTPUT" ? "ACTUAL_OUTPUT" : "PLANNED_OUTPUT";
 
 				// Handle parsing opNumber (could be number or string or array)
 				const rawOp = metadata.opNumber ?? "0";
@@ -327,7 +327,7 @@ function StockEntryForm() {
 				setResolvedOrder(built);
 				setEventItemId(String(item?.id ?? ""));
 				setEventGroupId(String(foundGroup.id ?? ""));
-				setItemCategory(category || "PLANNED");
+				setItemCategory(category || "PLANNED_OUTPUT");
 				setGroupRangeStart(typeof foundGroup.rangeStart === "string" ? foundGroup.rangeStart : "");
 				setGroupRangeEnd(typeof foundGroup.rangeEnd === "string" ? foundGroup.rangeEnd : "");
 
@@ -446,13 +446,13 @@ function StockEntryForm() {
 						: toIsoShiftRange(order.date, order.shift);
 
 				// For new groups (PLANNED), ensure range covers the segment end
-				if (itemCategory === "PLANNED" && range && segmentEnd && new Date(segmentEnd) > new Date(range.rangeEnd)) {
+				if (itemCategory === "PLANNED_OUTPUT" && range && segmentEnd && new Date(segmentEnd) > new Date(range.rangeEnd)) {
 					range.rangeEnd = segmentEnd;
 				}
 
 				console.log("[DEBUG] handleSave - itemCategory:", itemCategory, "eventGroupId:", eventGroupId, "eventItemId:", eventItemId);
 
-				if (itemCategory === "PLANNED") {
+				if (itemCategory === "PLANNED_OUTPUT") {
 					// PLANNED: Create a NEW group with category COMPLETED
 					const createdGroup = await createDeviceStateEventGroup({
 						deviceId: order.lhtDeviceId,
@@ -467,7 +467,7 @@ function StockEntryForm() {
 								{
 									segmentStart: segmentStart || actualStartTime,
 									segmentEnd: segmentEnd || actualEndTime,
-									category: "COMPLETED",
+									category: "ACTUAL_OUTPUT",
 									operatorCode: order.code,
 									partNumber: order.partNumber,
 									workOrder: order.id,
@@ -485,6 +485,7 @@ function StockEntryForm() {
 										actualStartTime,
 										actualEndTime,
 										remarks,
+										annotationType: "COMPLETED",
 									},
 								},
 							],
@@ -497,7 +498,7 @@ function StockEntryForm() {
 						const newItemId = Array.isArray(createdGroup.Items) && createdGroup.Items[0] ? String(createdGroup.Items[0].id ?? "") : "";
 						setEventGroupId(newGroupId);
 						setEventItemId(newItemId);
-						setItemCategory("COMPLETED");
+						setItemCategory("ACTUAL_OUTPUT");
 
 						// Optimistic Global Update (Create)
 						setGlobalAssignments((prev) => {
@@ -506,7 +507,7 @@ function StockEntryForm() {
 								if (a.id === orderId || a.lhtGroupId === orderId) {
 									return {
 										...a,
-										status: "COMPLETED",
+										status: "ACTUAL_OUTPUT",
 										actualOutput,
 										toolChanges,
 										rejects,
@@ -536,7 +537,7 @@ function StockEntryForm() {
 								id: eventItemId,
 								segmentStart,
 								segmentEnd,
-								category: "COMPLETED",
+								category: "ACTUAL_OUTPUT",
 								operatorCode: order.code,
 								partNumber: order.partNumber,
 								workOrder: order.id,
@@ -554,6 +555,7 @@ function StockEntryForm() {
 									actualStartTime,
 									actualEndTime,
 									remarks,
+									annotationType: "COMPLETED",
 								},
 							},
 						],
@@ -566,7 +568,7 @@ function StockEntryForm() {
 							if (a.id === orderId || a.lhtGroupId === orderId) {
 								return {
 									...a,
-									status: "COMPLETED",
+									status: "ACTUAL_OUTPUT",
 									actualOutput,
 									toolChanges,
 									rejects,
@@ -588,7 +590,7 @@ function StockEntryForm() {
 		}
 
 		updateOrder(orderId, {
-			status: "COMPLETED",
+			status: "ACTUAL_OUTPUT",
 			actualOutput,
 			toolChanges,
 			rejects,

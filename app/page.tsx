@@ -152,7 +152,7 @@ export default function Home() {
 						const startTime = formatTimeToIST(item?.segmentStart ?? undefined);
 						const endTime = formatTimeToIST(item?.segmentEnd ?? undefined);
 						const category = typeof item?.category === "string" ? String(item.category).toUpperCase() : "";
-						const status = category === "COMPLETED" ? "COMPLETED" : "PLANNED";
+						const status = category === "ACTUAL_OUTPUT" ? "ACTUAL_OUTPUT" : "PLANNED_OUTPUT";
 						const groupId = String(group?.id ?? workOrder);
 						const itemId = String(item?.id ?? "");
 
@@ -220,8 +220,8 @@ export default function Home() {
 	// Filter all orders by the global currentDate and currentShift
 	const todaysOrders = sourceOrders.filter((o) => o.date === currentDate && (String(o.shift).includes(currentShift) || o.shift === currentShift));
 
-	const activeOrders = todaysOrders.filter((o) => o.status === "PLANNED" || o.status === "ACTIVE");
-	const completedOrders = todaysOrders.filter((o) => o.status === "COMPLETED");
+	const activeOrders = todaysOrders.filter((o) => o.status === "PLANNED_OUTPUT" || o.status === "ACTIVE");
+	const completedOrders = todaysOrders.filter((o) => o.status === "ACTUAL_OUTPUT");
 
 	const activeCount = activeOrders.length;
 
