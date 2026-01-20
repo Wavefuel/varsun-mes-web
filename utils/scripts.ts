@@ -561,30 +561,7 @@ interface DeleteDeviceStateEventGroupItemsManyData {
  * @param data - The data required to delete items
  * @returns The deletion result
  */
-export async function deleteDeviceStateEventGroupItemsMany(data: DeleteDeviceStateEventGroupItemsManyData) {
-	try {
-		if (!data.deviceId) throw new Error("Invalid Input, deviceId is required.");
-		if (!data.clusterId) throw new Error("Invalid Input, clusterId is required.");
-		if (!data.account) throw new Error("Invalid Input, account is required.");
-		if (!data.itemIds || data.itemIds.length === 0) {
-			throw new Error("Invalid Input, itemIds array is required and cannot be empty.");
-		}
 
-		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
-		const deviceStateEventsUrl = `${data.clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
-
-		const response = await lightHouseAPIHandler.delete(`${deviceStateEventsUrl}/groups/items/delete/many`, {
-			data: { itemIds: data.itemIds },
-			headers: {
-				"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
-			},
-		});
-
-		return response.data?.data;
-	} catch (error) {
-		throw error;
-	}
-}
 
 export interface DeleteDeviceStateEventGroupItemsManyByClusterData {
 	clusterId: string;

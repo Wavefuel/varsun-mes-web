@@ -15,7 +15,6 @@ import { useData } from "@/context/DataContext";
 import type { Order, Assignment } from "@/lib/types";
 import {
 	deleteDeviceStateEventGroupItems,
-	deleteDeviceStateEventGroupItemsMany,
 	deleteDeviceStateEventGroupItemsManyByCluster,
 	fetchDeviceList,
 	readDeviceStateEventGroupsWithItemsByCluster,
