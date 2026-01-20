@@ -29,6 +29,7 @@ export interface Order {
 	// Lighthouse References
 	lhtDeviceId?: string;
 	lhtGroupId?: string;
+	lhtItemId?: string;
 }
 
 export const MOCK_INITIAL_ORDERS: Order[] = [

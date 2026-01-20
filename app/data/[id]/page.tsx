@@ -158,10 +158,50 @@ export default function MachineTaggingPage() {
 	const [error, setError] = useState<string | null>(null);
 
 	const clusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID || "";
+	// Deduplication ref
+	const lastFetchParams = React.useRef<string>("");
+
+	const isFutureDate = React.useMemo(() => {
+		const now = new Date();
+		// Use local time YYYY-MM-DD
+		const todayStr = now.toLocaleDateString("en-CA");
+
+		if (currentDate > todayStr) {
+			return true;
+		} else if (currentDate < todayStr) {
+			return false;
+		} else {
+			// Same day - check shift start times
+			const currentHour = now.getHours();
+			if (currentShift.includes("Night")) {
+				// Night shift starts at 20:00 (8 PM)
+				return currentHour < 20;
+			} else {
+				// Day shift starts at 08:00 (8 AM)
+				return currentHour < 8;
+			}
+		}
+	}, [currentDate, currentShift]);
 
 	// Fetch device status periods from API
 	useEffect(() => {
 		const fetchPeriods = async () => {
+			if (isFutureDate) {
+				setEvents([]);
+				setLoading(false);
+				return;
+			}
+
+			// Prevent duplicate calls
+			const fetchKey = `${machineId}|${currentDate}|${currentShift}`;
+			if (lastFetchParams.current === fetchKey) {
+				// console.log("Skipping duplicate fetch for:", fetchKey);
+				// Ensure loading is false if we skip
+				if (loading) setLoading(false);
+				return;
+			}
+			lastFetchParams.current = fetchKey;
+
 			try {
 				setLoading(true);
 				setError(null);
@@ -204,14 +244,14 @@ export default function MachineTaggingPage() {
 				});
 				const groupItems = Array.isArray(groups)
 					? (groups as any[]).flatMap((group: any) => {
-						const items = Array.isArray(group?.Items) ? group.Items : [];
-						return items.map((item: any) => ({
-							...item,
-							groupId: group.id,
-							groupTags: Array.isArray(group.tags) ? group.tags : [],
-							annotationType: group?.metadata?.annotationType,
-						}));
-					})
+							const items = Array.isArray(group?.Items) ? group.Items : [];
+							return items.map((item: any) => ({
+								...item,
+								groupId: group.id,
+								groupTags: Array.isArray(group.tags) ? group.tags : [],
+								annotationType: group?.metadata?.annotationType,
+							}));
+						})
 					: [];
 
 				console.log("API Response:", result);
@@ -281,7 +321,7 @@ export default function MachineTaggingPage() {
 		if (machineId && clusterId) {
 			fetchPeriods();
 		}
-	}, [machineId, currentDate, clusterId, currentShift]);
+	}, [machineId, currentDate, clusterId, currentShift, isFutureDate]);
 
 	// Calculate stats from events
 	const stats = React.useMemo(() => {
@@ -381,45 +421,51 @@ export default function MachineTaggingPage() {
 					/>
 				</div>
 			) : (
-				<main className="!py-2 px-4 space-y-2 pb-24">
-					{/* Stats Grid */}
-					<section className="grid grid-cols-3 !gap-2">
-						<div className="bg-white !rounded-lg border border-gray-100 shadow-sm !px-3 !py-1.5 flex flex-col justify-center items-start min-h-[52px]">
-							<p className="!text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Total Running</p>
-							<p className="text-xs font-bold text-gray-800 leading-tight">{stats.totalRunning}</p>
-						</div>
-						<div className="bg-white !rounded-lg border border-gray-100 shadow-sm !px-3 !py-1.5 flex flex-col justify-center items-start min-h-[52px]">
-							<p className="!text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Total Idle</p>
-							<p className="text-xs font-bold text-gray-800 leading-tight">{stats.totalIdle}</p>
-						</div>
-						<div className="bg-white !rounded-lg border border-gray-100 shadow-sm !px-3 !py-1.5 flex flex-col justify-center items-start min-h-[52px]">
-							<p className="!text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Offline</p>
-							<p className="text-xs font-bold text-gray-800 leading-tight">{stats.totalOffline}</p>
-						</div>
-					</section>
+				<main className="!py-2 px-4 space-y-2 pb-24 flex-1 flex flex-col">
+					{/* Stats Grid - Hide if future date */}
+					{!isFutureDate && (
+						<section className="grid grid-cols-3 !gap-2">
+							<div className="bg-white !rounded-lg border border-gray-100 shadow-sm !px-3 !py-1.5 flex flex-col justify-center items-start min-h-[52px]">
+								<p className="!text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Total Running</p>
+								<p className="text-xs font-bold text-gray-800 leading-tight">{stats.totalRunning}</p>
+							</div>
+							<div className="bg-white !rounded-lg border border-gray-100 shadow-sm !px-3 !py-1.5 flex flex-col justify-center items-start min-h-[52px]">
+								<p className="!text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Total Idle</p>
+								<p className="text-xs font-bold text-gray-800 leading-tight">{stats.totalIdle}</p>
+							</div>
+							<div className="bg-white !rounded-lg border border-gray-100 shadow-sm !px-3 !py-1.5 flex flex-col justify-center items-start min-h-[52px]">
+								<p className="!text-[9px] font-bold text-gray-400 uppercase tracking-wider mb-0.5">Offline</p>
+								<p className="text-xs font-bold text-gray-800 leading-tight">{stats.totalOffline}</p>
+							</div>
+						</section>
+					)}
 
-					{/* Search Bar */}
-					<div className="pb-1">
-						<SearchFilterBar
-							searchQuery={searchQuery}
-							onSearchChange={setSearchQuery}
-							placeholder="Search events..."
-							showFilters={showFilters}
-							onToggleFilters={() => setShowFilters(!showFilters)}
-						/>
-					</div>
+					{/* Search Bar - Hide if future date */}
+					{!isFutureDate && (
+						<div className="pb-1">
+							<SearchFilterBar
+								searchQuery={searchQuery}
+								onSearchChange={setSearchQuery}
+								placeholder="Search events..."
+								showFilters={showFilters}
+								onToggleFilters={() => setShowFilters(!showFilters)}
+							/>
+						</div>
+					)}
 
-					{/* Event List */}
-					<div className="space-y-2">
+					<div className="space-y-2 flex-1 flex flex-col">
 						{loading ? (
-							<div className="text-center py-12 flex flex-col items-center">
-								<div className="animate-spin rounded-full h-10 w-10 border-b-2 border-gray-900 mb-2"></div>
-								<p className="text-sm font-bold text-gray-400">Loading events...</p>
+							<div className="flex-1 flex flex-col items-center justify-center py-12">
+								<Loader />
 							</div>
 						) : error ? (
 							<div className="text-center py-12 flex flex-col items-center">
 								<span className="material-symbols-outlined text-[48px] text-red-300 mb-2">error</span>
 								<p className="text-sm font-bold text-red-400">{error}</p>
+							</div>
+						) : isFutureDate ? (
+							<div className="flex-1 flex flex-col items-center justify-center -mt-20">
+								<EmptyState icon="event_busy" title="Future Date" description="Cannot view data for future dates." />
 							</div>
 						) : filteredEvents.length > 0 ? (
 							filteredEvents.map((event) => (
@@ -434,9 +480,17 @@ export default function MachineTaggingPage() {
 								/>
 							))
 						) : (
-							<div className="text-center py-12 flex flex-col items-center opacity-60">
-								<span className="material-symbols-outlined text-[48px] text-gray-300 mb-2">event_busy</span>
-								<p className="text-sm font-bold text-gray-400">No events found for this date</p>
+							<div className="flex-1 flex flex-col items-center justify-center -mt-20">
+								<EmptyState
+									icon="event_busy"
+									title="No Events Found"
+									description={
+										<span>
+											No downtime events recorded for <br />
+											<span className="text-primary font-bold mt-1 block">{currentDate}</span>
+										</span>
+									}
+								/>
 							</div>
 						)}
 					</div>
@@ -562,19 +616,19 @@ function EventCard({
 			const rangeEndMs = toDateUTC.getTime();
 			const matchingGroup = Array.isArray(existingGroups)
 				? existingGroups.find((group) => {
-					const startMs = group?.rangeStart ? new Date(group.rangeStart).getTime() : NaN;
-					const endMs = group?.rangeEnd ? new Date(group.rangeEnd).getTime() : NaN;
+						const startMs = group?.rangeStart ? new Date(group.rangeStart).getTime() : NaN;
+						const endMs = group?.rangeEnd ? new Date(group.rangeEnd).getTime() : NaN;
 
-					// Check metadata for annotationType: 'event'
-					// We treat 'null' metadata as valid for legacy reasons? 
-					// NO, user said: "if any item didnot match we create group and item if any group and item is there with that we update group"
-					// AND "check in that metadat is annoationstype is event"
-					// So we MUST strictly match annotationType === 'event'.
-					const meta = group?.metadata as Record<string, unknown> | undefined;
-					const isEventGroup = meta?.annotationType === "event";
+						// Check metadata for annotationType: 'event'
+						// We treat 'null' metadata as valid for legacy reasons?
+						// NO, user said: "if any item didnot match we create group and item if any group and item is there with that we update group"
+						// AND "check in that metadat is annoationstype is event"
+						// So we MUST strictly match annotationType === 'event'.
+						const meta = group?.metadata as Record<string, unknown> | undefined;
+						const isEventGroup = meta?.annotationType === "event";
 
-					return startMs === rangeStartMs && endMs === rangeEndMs && isEventGroup;
-				})
+						return startMs === rangeStartMs && endMs === rangeEndMs && isEventGroup;
+					})
 				: null;
 
 			const itemPayload: DeviceStateEventItemInput = {
@@ -656,23 +710,11 @@ function EventCard({
 			});
 			setIsExpanded(true);
 
-			toast.custom((t) => (
-				<CustomToast
-					t={t}
-					type="success"
-					title="Save Successful"
-					message="Reason code has been saved successfully."
-				/>
-			));
+			toast.custom((t) => <CustomToast t={t} type="success" title="Save Successful" message="Reason code has been saved successfully." />);
 		} catch (err) {
 			console.error("Failed to save reason code:", err);
 			toast.custom((t) => (
-				<CustomToast
-					t={t}
-					type="error"
-					title="Save Failed"
-					message={err instanceof Error ? err.message : "Failed to save reason code."}
-				/>
+				<CustomToast t={t} type="error" title="Save Failed" message={err instanceof Error ? err.message : "Failed to save reason code."} />
 			));
 		} finally {
 			setIsSaving(false);

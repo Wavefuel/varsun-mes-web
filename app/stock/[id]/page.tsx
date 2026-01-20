@@ -496,31 +496,35 @@ function StockEntryForm() {
 					if (createdGroup) {
 						const newGroupId = String(createdGroup.id ?? "");
 						const newItemId = Array.isArray(createdGroup.Items) && createdGroup.Items[0] ? String(createdGroup.Items[0].id ?? "") : "";
-						setEventGroupId(newGroupId);
-						setEventItemId(newItemId);
-						setItemCategory("ACTUAL_OUTPUT");
 
-						// Optimistic Global Update (Create)
+						// NOTE: We do NOT update the local 'eventGroupId' state immediately because we are navigating away.
+
+						const newAssignment: Order = {
+							...order,
+							id: newGroupId, // New ID for the actual record
+							status: "ACTUAL_OUTPUT",
+							actualOutput,
+							toolChanges,
+							rejects,
+							actualStartTime,
+							actualEndTime,
+							remarks,
+							lhtGroupId: newGroupId,
+							lhtItemId: newItemId,
+						};
+
+						// Optimistic Global Update (Create - Append, don't replace)
 						setGlobalAssignments((prev) => {
 							if (!prev) return prev;
-							return prev.map((a) => {
-								if (a.id === orderId || a.lhtGroupId === orderId) {
-									return {
-										...a,
-										status: "ACTUAL_OUTPUT",
-										actualOutput,
-										toolChanges,
-										rejects,
-										actualStartTime,
-										actualEndTime,
-										remarks,
-										lhtGroupId: newGroupId,
-										lhtItemId: newItemId,
-									};
-								}
-								return a;
-							});
+							return [...prev, newAssignment];
 						});
+
+						// Local Storage Sync (Add new)
+						addOrder(newAssignment);
+
+						toast.success("Order completed successfully");
+						router.push("/stock");
+						return;
 					}
 				} else {
 					// COMPLETED: Update existing item in the existing group
@@ -561,7 +565,7 @@ function StockEntryForm() {
 						],
 					});
 
-					// Optimistic Global Update (Update)
+					// Optimistic Global Update (Update existing)
 					setGlobalAssignments((prev) => {
 						if (!prev) return prev;
 						return prev.map((a) => {
@@ -580,6 +584,21 @@ function StockEntryForm() {
 							return a;
 						});
 					});
+
+					// Local Storage Sync (Update)
+					updateOrder(orderId, {
+						status: "ACTUAL_OUTPUT",
+						actualOutput,
+						toolChanges,
+						rejects,
+						actualStartTime,
+						actualEndTime,
+						remarks,
+					});
+
+					toast.success("Order updated successfully");
+					router.push("/stock");
+					return;
 				}
 			} catch (e) {
 				console.error(e);
@@ -589,6 +608,7 @@ function StockEntryForm() {
 			}
 		}
 
+		// Fallback for non-Lighthouse mode (Local Only)
 		updateOrder(orderId, {
 			status: "ACTUAL_OUTPUT",
 			actualOutput,

@@ -240,22 +240,41 @@ export default function StockPage() {
 		[lighthouseEnabled, orders, globalAssignments],
 	);
 
+	const consolidatedOrders = useMemo(() => {
+		const map = new Map<string, Order>();
+		sourceOrders.forEach((order) => {
+			const key = (order as any).workOrder || order.id;
+			if (!key) return;
+
+			const existing = map.get(key);
+			if (!existing) {
+				map.set(key, order);
+			} else {
+				// Priority: ACTUAL_OUTPUT > PLANNED_OUTPUT
+				if (order.status === "ACTUAL_OUTPUT") {
+					map.set(key, order);
+				}
+			}
+		});
+		return Array.from(map.values());
+	}, [sourceOrders]);
+
 	const machineOptions = useMemo(() => {
-		const machines = Array.from(new Set(sourceOrders.map((o) => o.machine)))
+		const machines = Array.from(new Set(consolidatedOrders.map((o) => o.machine)))
 			.filter(Boolean)
 			.sort();
 		return ["All", ...machines];
-	}, [sourceOrders]);
+	}, [consolidatedOrders]);
 
 	const operatorOptions = useMemo(() => {
-		const operators = Array.from(new Set(sourceOrders.map((o) => o.operator)))
+		const operators = Array.from(new Set(consolidatedOrders.map((o) => o.operator)))
 			.filter(Boolean)
 			.sort();
 		return ["All", ...operators];
-	}, [sourceOrders]);
+	}, [consolidatedOrders]);
 
 	// Filter Logic
-	const filteredOrders = sourceOrders.filter((order) => {
+	const filteredOrders = consolidatedOrders.filter((order) => {
 		// API already filters by shift range, but we keep it for consistency
 		const displayWorkOrder = (order as Order & { workOrder?: string }).workOrder || order.id;
 
