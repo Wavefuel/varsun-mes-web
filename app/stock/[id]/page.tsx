@@ -18,6 +18,7 @@ import {
 	type DeviceSummary,
 } from "@/utils/scripts";
 import { combineISTDateAndTime, formatTimeToIST24 } from "@/utils/dateUtils";
+import { cn } from "@/lib/utils";
 
 type ApiEventItem = {
 	id?: string;

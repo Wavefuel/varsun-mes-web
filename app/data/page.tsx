@@ -8,6 +8,7 @@ import EmptyState from "@/components/EmptyState"; // Import EmptyState
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
 import Loader from "@/components/Loader";
+import Select from "@/components/ui/Select";
 import { useData } from "@/context/DataContext";
 
 import { fetchDeviceList, type DeviceSummary } from "@/utils/scripts";
@@ -26,9 +27,44 @@ function getPseudoRandom(seed: string) {
 	return Math.abs(hash);
 }
 
+// Helper to determine status colors
+function getStatusStyles(status: string = "") {
+	const s = status.toUpperCase();
+
+	// Green - Active/Good
+	if (["ACTIVE", "RUNNING", "ONLINE", "CHARGING", "FINISHING"].includes(s)) {
+		return "text-emerald-700 bg-emerald-50 border border-emerald-200/50";
+	}
+
+	// Blue - Ready/Info
+	if (["AVAILABLE", "STANDBY", "PREPARING"].includes(s)) {
+		return "text-blue-700 bg-blue-50 border border-blue-200/50";
+	}
+
+	// Amber - Warning/Pause
+	if (["IDLE", "PENDING", "SUSPENDEDEVSE", "SUSPENDEDEV", "RESERVED"].includes(s)) {
+		return "text-amber-700 bg-amber-50 border border-amber-200/50";
+	}
+
+	// Orange - Maintenance
+	if (["MAINTENANCE"].includes(s)) {
+		return "text-orange-700 bg-orange-50 border border-orange-200/50";
+	}
+
+	// Red - Error/Critical
+	if (["ERROR", "FAULTED", "UNAVAILABLE"].includes(s)) {
+		return "text-red-700 bg-red-50 border border-red-200/50";
+	}
+
+	// Gray - Inactive/Unknown/Default
+	return "text-gray-600 bg-gray-100 border border-gray-200/50";
+}
+
 export default function EventsPage() {
 	const { currentDate, eventsDevices, setEventsDevices, currentShift } = useData();
 	const [searchQuery, setSearchQuery] = useState("");
+	const [filterStatus, setFilterStatus] = useState("All");
+	const [filterConnection, setFilterConnection] = useState("All");
 	const [showFilters, setShowFilters] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
 	const [isError, setIsError] = useState(false);
@@ -54,8 +90,24 @@ export default function EventsPage() {
 	const filteredMachines = eventsDevices.filter((m) => {
 		const query = searchQuery.toLowerCase();
 		const name = m.deviceName || m.id;
-		return name.toLowerCase().includes(query) || m.id.toLowerCase().includes(query) || (m.serialNumber || "").toLowerCase().includes(query);
+		const matchesSearch =
+			name.toLowerCase().includes(query) || m.id.toLowerCase().includes(query) || (m.serialNumber || "").toLowerCase().includes(query);
+
+		const matchesStatus = filterStatus === "All" || (m.deviceStatus || "N/A") === filterStatus;
+		const matchesConnection = filterConnection === "All" || (m.connectionStatus || "N/A") === filterConnection;
+
+		return matchesSearch && matchesStatus && matchesConnection;
 	});
+
+	const statusOptions = React.useMemo(() => {
+		const statuses = Array.from(new Set(eventsDevices.map((d) => d.deviceStatus || "N/A"))).sort();
+		return ["All", ...statuses];
+	}, [eventsDevices]);
+
+	const connectionOptions = React.useMemo(() => {
+		const statuses = Array.from(new Set(eventsDevices.map((d) => d.connectionStatus || "N/A"))).sort();
+		return ["All", ...statuses];
+	}, [eventsDevices]);
 
 	// Helper to generate dynamic status based on machine + date + shift
 	const getMachineStatus = (machineId: string, date: string, shift: string) => {
@@ -92,6 +144,36 @@ export default function EventsPage() {
 					showFilters={showFilters}
 					onToggleFilters={() => setShowFilters(!showFilters)}
 				/>
+
+				{showFilters && (
+					<div className="mt-2 animate-in slide-in-from-top-1 fade-in duration-200 grid grid-cols-2 gap-3 items-end">
+						<div>
+							<p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 ml-1">Device Status</p>
+							<div className="relative">
+								<Select
+									value={filterStatus}
+									onChange={setFilterStatus}
+									options={statusOptions}
+									placeholder="All"
+									className="w-full h-8 bg-white rounded-md text-xs"
+								/>
+							</div>
+						</div>
+
+						<div>
+							<p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 ml-1">Connection</p>
+							<div className="relative">
+								<Select
+									value={filterConnection}
+									onChange={setFilterConnection}
+									options={connectionOptions}
+									placeholder="All"
+									className="w-full h-8 bg-white rounded-md text-xs"
+								/>
+							</div>
+						</div>
+					</div>
+				)}
 			</div>
 
 			{/* Machines List */}
@@ -138,37 +220,31 @@ export default function EventsPage() {
 										<div className="flex flex-col gap-0.5 flex-1">
 											{/* Primary ID + Status Dot */}
 											<div className="flex items-center gap-2">
-												<h3 className="list-title">{machine.deviceName || machine.id}</h3>
+												<h3 className="list-title">{machine.deviceName || "N/A"}</h3>
 												<div
 													className={cn(
 														"size-2 rounded-full",
-														status === "Running"
-															? "bg-emerald-500"
-															: status === "Idle"
-																? "bg-amber-500"
-																: status === "Maintenance"
-																	? "bg-blue-500"
-																	: "bg-gray-300",
+														machine.connectionStatus === "ONLINE" ? "bg-emerald-500" : "bg-red-400",
 													)}
 												/>
 											</div>
 
-											{/* Secondary Name */}
-											<p className="list-subtext">{machine.foreignId || machine.id}</p>
-
 											{/* Serial Number */}
 											<p className="list-subtext">{machine.serialNumber || "No S/N"}</p>
+
+											{/* Last Seen */}
+											<p className="list-subtext">Last seen {new Date(machine.updatedAt).toLocaleDateString()}</p>
 										</div>
 
 										{/* Right Column: Just the Call-to-action Metric */}
 										<div className="list-metric-column">
 											<span
 												className={cn(
-													"list-tag",
-													untaggedCount > 0 ? "text-amber-700 bg-amber-50" : "text-emerald-700 bg-emerald-50",
+													"text-[10px] font-bold px-2.5 py-1 rounded-md tracking-wider uppercase",
+													getStatusStyles(machine.deviceStatus),
 												)}
 											>
-												{untaggedCount} Untagged
+												{machine.deviceStatus || "N/A"}
 											</span>
 										</div>
 									</div>

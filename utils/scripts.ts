@@ -1,13 +1,7 @@
 // Assuming these are imported from your API handler module
-import { lightHouseAPIHandler } from "./lightHouse"
+import { lightHouseAPIHandler } from "./lightHouse";
 
-export type JsonValue =
-	| string
-	| number
-	| boolean
-	| null
-	| { [key: string]: JsonValue }
-	| JsonValue[];
+export type JsonValue = string | number | boolean | null | { [key: string]: JsonValue } | JsonValue[];
 
 export interface Account {
 	id?: string;
@@ -56,10 +50,10 @@ export interface CreateDeviceStateEventGroupData {
 /**
  * Creates a Device State Event Group along with its items in a single API call.
  * Items are created within the same transaction as the group.
- * 
+ *
  * @param data - The data required to create the group and items
  * @returns The created group with its items
- * 
+ *
  * @example
  * const result = await createDeviceStateEventGroup({
  *   deviceId: "device-123",
@@ -106,9 +100,9 @@ export async function createDeviceStateEventGroup(data: CreateDeviceStateEventGr
 				? buildDayRange(data.body.date)
 				: data.body.rangeStart && data.body.rangeEnd
 					? {
-						rangeStart: formatRangeValue(data.body.rangeStart),
-						rangeEnd: formatRangeValue(data.body.rangeEnd),
-					}
+							rangeStart: formatRangeValue(data.body.rangeStart),
+							rangeEnd: formatRangeValue(data.body.rangeEnd),
+						}
 					: null;
 		if (!range) {
 			throw new Error("Invalid Input, rangeStart/rangeEnd or date is required.");
@@ -138,20 +132,16 @@ export async function createDeviceStateEventGroup(data: CreateDeviceStateEventGr
 		const title = data.body.title && data.body.title.trim() ? data.body.title : autoTitle;
 
 		// Create the group with items in a single API call
-		const response = await lightHouseAPIHandler.post(
-			`${deviceStateEventsUrl}/groups/create/one`,
-			{
-				rangeStart: range.rangeStart,
-				rangeEnd: range.rangeEnd,
-				title,
-				description: data.body.description,
-				notes: data.body.notes,
-				metadata: data.body.metadata,
-				tags: data.body.tags,
-				items: normalizedItems,
-			}
-
-		);
+		const response = await lightHouseAPIHandler.post(`${deviceStateEventsUrl}/groups/create/one`, {
+			rangeStart: range.rangeStart,
+			rangeEnd: range.rangeEnd,
+			title,
+			description: data.body.description,
+			notes: data.body.notes,
+			metadata: data.body.metadata,
+			tags: data.body.tags,
+			items: normalizedItems,
+		});
 
 		return response.data?.data;
 	} catch (error) {
@@ -213,10 +203,13 @@ export interface DeviceSummary {
 	clusterId?: string;
 	projectId?: string | null;
 	metadata?: JsonValue;
+	connectionStatus: string;
+	deviceStatus: string;
+	createdAt: string;
+	updatedAt: string;
 }
 
-const formatRangeValue = (value: Date | string): string =>
-	value instanceof Date ? value.toISOString() : String(value);
+const formatRangeValue = (value: Date | string): string => (value instanceof Date ? value.toISOString() : String(value));
 
 const formatDateOnly = (value: Date | string): string => {
 	const parsed = value instanceof Date ? value : new Date(value);
@@ -226,8 +219,7 @@ const formatDateOnly = (value: Date | string): string => {
 	return parsed.toISOString().split("T")[0];
 };
 
-const pickDefined = (input: Record<string, unknown>) =>
-	Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
+const pickDefined = (input: Record<string, unknown>) => Object.fromEntries(Object.entries(input).filter(([, value]) => value !== undefined));
 
 const parseDateValue = (value: Date | string) => {
 	if (value instanceof Date) {
@@ -299,7 +291,9 @@ const buildItemMetadata = (input: {
 	estPartAdd?: string | number | null;
 }) => {
 	const base =
-		input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata) ? { ...(input.metadata as Record<string, JsonValue>) } : {};
+		input.metadata && typeof input.metadata === "object" && !Array.isArray(input.metadata)
+			? { ...(input.metadata as Record<string, JsonValue>) }
+			: {};
 	const extra = pickDefined({
 		operatorCode: input.operatorCode,
 		partNumber: input.partNumber,
@@ -341,10 +335,10 @@ const normalizeUpdateItemPayload = (item: DeviceStateEventItemUpdateInput) => ({
 /**
  * Updates a Device State Event Group and its items.
  * Supports updating group properties, creating new items, updating existing items, and deleting items.
- * 
+ *
  * @param data - The data required to update the group and items
  * @returns The updated group
- * 
+ *
  * @example
  * const result = await updateDeviceStateEventGroup({
  *   deviceId: "device-123",
@@ -403,17 +397,17 @@ export async function updateDeviceStateEventGroup(data: UpdateDeviceStateEventGr
 				group: data.body.group,
 				items: data.body.items
 					? {
-						create: Array.isArray(data.body.items.create) ? data.body.items.create.map(normalizeCreateItemPayload) : undefined,
-						update: Array.isArray(data.body.items.update) ? data.body.items.update.map(normalizeUpdateItemPayload) : undefined,
-						delete: Array.isArray(data.body.items.delete) ? data.body.items.delete : undefined,
-					}
+							create: Array.isArray(data.body.items.create) ? data.body.items.create.map(normalizeCreateItemPayload) : undefined,
+							update: Array.isArray(data.body.items.update) ? data.body.items.update.map(normalizeUpdateItemPayload) : undefined,
+							delete: Array.isArray(data.body.items.delete) ? data.body.items.delete : undefined,
+						}
 					: undefined,
 			},
 			{
 				headers: {
 					"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
 				},
-			}
+			},
 		);
 
 		return response.data?.data;
@@ -436,7 +430,7 @@ interface CreateDeviceStateEventGroupItemsData extends UpdateDeviceStateEventGro
 
 /**
  * Creates items within an existing Device State Event Group.
- * 
+ *
  * @param data - The data required to create items
  * @returns The updated group
  */
@@ -462,7 +456,7 @@ export async function createDeviceStateEventGroupItems(data: CreateDeviceStateEv
 				headers: {
 					"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
 				},
-			}
+			},
 		);
 
 		return response.data?.data;
@@ -477,7 +471,7 @@ interface UpdateDeviceStateEventGroupItemsData extends UpdateDeviceStateEventGro
 
 /**
  * Updates items within an existing Device State Event Group.
- * 
+ *
  * @param data - The data required to update items
  * @returns The updated group
  */
@@ -503,7 +497,7 @@ export async function updateDeviceStateEventGroupItems(data: UpdateDeviceStateEv
 				headers: {
 					"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
 				},
-			}
+			},
 		);
 
 		return response.data?.data;
@@ -518,7 +512,7 @@ interface DeleteDeviceStateEventGroupItemsData extends UpdateDeviceStateEventGro
 
 /**
  * Deletes items within an existing Device State Event Group.
- * 
+ *
  * @param data - The data required to delete items
  * @returns The updated group
  */
@@ -544,7 +538,7 @@ export async function deleteDeviceStateEventGroupItems(data: DeleteDeviceStateEv
 				headers: {
 					"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
 				},
-			}
+			},
 		);
 
 		return response.data?.data;
@@ -552,7 +546,6 @@ export async function deleteDeviceStateEventGroupItems(data: DeleteDeviceStateEv
 		throw error;
 	}
 }
-
 
 interface DeleteDeviceStateEventGroupItemsManyData {
 	deviceId: string;
@@ -580,15 +573,12 @@ export async function deleteDeviceStateEventGroupItemsMany(data: DeleteDeviceSta
 		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
 		const deviceStateEventsUrl = `${data.clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
 
-		const response = await lightHouseAPIHandler.delete(
-			`${deviceStateEventsUrl}/groups/items/delete/many`,
-			{
-				data: { itemIds: data.itemIds },
-				headers: {
-					"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
-				},
-			}
-		);
+		const response = await lightHouseAPIHandler.delete(`${deviceStateEventsUrl}/groups/items/delete/many`, {
+			data: { itemIds: data.itemIds },
+			headers: {
+				"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
+			},
+		});
 
 		return response.data?.data;
 	} catch (error) {
@@ -606,10 +596,10 @@ interface DeleteDeviceStateEventGroupData {
 
 /**
  * Deletes a Device State Event Group and all its items.
- * 
+ *
  * @param data - The data required to delete the group
  * @returns The deletion result
- * 
+ *
  * @example
  * const result = await deleteDeviceStateEventGroup({
  *   deviceId: "device-123",
@@ -636,14 +626,11 @@ export async function deleteDeviceStateEventGroup(data: DeleteDeviceStateEventGr
 		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
 		const deviceStateEventsUrl = `${data.clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
 
-		const response = await lightHouseAPIHandler.delete(
-			`${deviceStateEventsUrl}/groups/delete/one/${data.groupId}`,
-			{
-				headers: {
-					"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
-				},
-			}
-		);
+		const response = await lightHouseAPIHandler.delete(`${deviceStateEventsUrl}/groups/delete/one/${data.groupId}`, {
+			headers: {
+				"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
+			},
+		});
 
 		return response.data?.data;
 	} catch (error) {
@@ -665,10 +652,10 @@ interface ReadDeviceStateEventGroupsWithItemsData {
 /**
  * Reads Device State Event Groups with their items for a given date range.
  * Returns multiple groups if they exist within the specified range.
- * 
+ *
  * @param data - The data required to read groups
  * @returns The groups with their items
- * 
+ *
  * @example
  * const result = await readDeviceStateEventGroupsWithItems({
  *   deviceId: "device-123",
@@ -698,15 +685,12 @@ export async function readDeviceStateEventGroupsWithItems(data: ReadDeviceStateE
 		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
 		const deviceStateEventsUrl = `${data.clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
 
-		const response = await lightHouseAPIHandler.get(
-			`${deviceStateEventsUrl}/groups/read/many/with-items`,
-			{
-				params: {
-					rangeStart: data.query.rangeStart,
-					rangeEnd: data.query.rangeEnd,
-				},
-			}
-		);
+		const response = await lightHouseAPIHandler.get(`${deviceStateEventsUrl}/groups/read/many/with-items`, {
+			params: {
+				rangeStart: data.query.rangeStart,
+				rangeEnd: data.query.rangeEnd,
+			},
+		});
 
 		return response.data?.data;
 	} catch (error) {
@@ -741,16 +725,13 @@ export async function readDeviceStateEventGroupsWithItemsByCluster(data: ReadDev
 		}
 
 		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
-		const response = await lightHouseAPIHandler.get(
-			`${data.clusterId}/device/${applicationId}/groups/read/many/with-items`,
-			{
-				params: {
-					rangeStart: data.query.rangeStart,
-					rangeEnd: data.query.rangeEnd,
-					...(data.deviceId ? { deviceId: data.deviceId } : {}),
-				},
-			}
-		);
+		const response = await lightHouseAPIHandler.get(`${data.clusterId}/device/${applicationId}/groups/read/many/with-items`, {
+			params: {
+				rangeStart: data.query.rangeStart,
+				rangeEnd: data.query.rangeEnd,
+				...(data.deviceId ? { deviceId: data.deviceId } : {}),
+			},
+		});
 		return response.data?.data;
 	} catch (error) {
 		throw error;
@@ -780,16 +761,19 @@ export async function readDeviceStateEventItemsByDate(data: ReadDeviceStateEvent
 
 	const items = Array.isArray(groups)
 		? (groups as unknown[]).flatMap((groupUnknown) => {
-			const group = (groupUnknown && typeof groupUnknown === "object" ? (groupUnknown as Record<string, unknown>) : {}) as Record<string, unknown>;
-			const groupItems = Array.isArray(group?.Items) ? (group.Items as unknown[]) : [];
-			const groupId = group.id;
-			const groupTitle = group.title;
-			return groupItems.map((itemUnknown) => ({
-				...(itemUnknown && typeof itemUnknown === "object" ? (itemUnknown as Record<string, unknown>) : {}),
-				groupId,
-				groupTitle,
-			}));
-		})
+				const group = (groupUnknown && typeof groupUnknown === "object" ? (groupUnknown as Record<string, unknown>) : {}) as Record<
+					string,
+					unknown
+				>;
+				const groupItems = Array.isArray(group?.Items) ? (group.Items as unknown[]) : [];
+				const groupId = group.id;
+				const groupTitle = group.title;
+				return groupItems.map((itemUnknown) => ({
+					...(itemUnknown && typeof itemUnknown === "object" ? (itemUnknown as Record<string, unknown>) : {}),
+					groupId,
+					groupTitle,
+				}));
+			})
 		: [];
 
 	return items;
@@ -818,26 +802,27 @@ export async function fetchDeviceList(data: FetchDeviceListData): Promise<Device
 			throw new Error("Invalid Input, APPLICATION_ID is required.");
 		}
 
-		const response = await lightHouseAPIHandler.post(
-			`${data.clusterId}/device/${applicationId}/read/many`,
-			{
-				where: {
-					clusterId: data.clusterId,
-
-				},
-				select: {
-					id: true,
-					deviceName: true,
-					serialNumber: true,
-					foreignId: true,
-					itemId: true,
-				},
-				...(data.query?.page && data.query?.limit && {
+		const response = await lightHouseAPIHandler.post(`${data.clusterId}/device/${applicationId}/read/many`, {
+			where: {
+				clusterId: data.clusterId,
+			},
+			select: {
+				id: true,
+				deviceName: true,
+				serialNumber: true,
+				foreignId: true,
+				itemId: true,
+				connectionStatus: true,
+				deviceStatus: true,
+				createdAt: true,
+				updatedAt: true,
+			},
+			...(data.query?.page &&
+				data.query?.limit && {
 					skip: (data.query.page - 1) * data.query.limit,
 					take: data.query.limit,
 				}),
-			}
-		);
+		});
 
 		return response.data?.data ?? [];
 	} catch (error) {
@@ -881,17 +866,17 @@ export interface FetchDeviceStatusPeriodsResponse {
 /**
  * Fetches device status periods that meet a minimum duration threshold.
  * Returns all device states or a specific state if deviceStatus is provided.
- * 
+ *
  * @param data - The data required to fetch status periods
  * @returns Device status periods with duration information
- * 
+ *
  * @example
  * // Get all states >= 15 mins for today
  * const result = await fetchDeviceStatusPeriods({
  *   deviceId: "device-123",
  *   clusterId: "cluster-456"
  * });
- * 
+ *
  * // Get IDLE periods >= 20 mins for a specific date range
  * const result = await fetchDeviceStatusPeriods({
  *   deviceId: "device-123",
@@ -916,18 +901,15 @@ export async function fetchDeviceStatusPeriods(data: FetchDeviceStatusPeriodsDat
 		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
 		const deviceStateEventsUrl = `${data.clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
 
-		const response = await lightHouseAPIHandler.get(
-			`${deviceStateEventsUrl}/status-periods`,
-			{
-				params: {
-					...(data.query?.deviceStatus && { deviceStatus: data.query.deviceStatus }),
-					...(data.query?.reasonCode && { reasonCode: data.query.reasonCode }),
-					...(data.query?.fromDate && { fromDate: data.query.fromDate }),
-					...(data.query?.toDate && { toDate: data.query.toDate }),
-					...(data.query?.minDurationMinutes && { minDurationMinutes: data.query.minDurationMinutes }),
-				},
-			}
-		);
+		const response = await lightHouseAPIHandler.get(`${deviceStateEventsUrl}/status-periods`, {
+			params: {
+				...(data.query?.deviceStatus && { deviceStatus: data.query.deviceStatus }),
+				...(data.query?.reasonCode && { reasonCode: data.query.reasonCode }),
+				...(data.query?.fromDate && { fromDate: data.query.fromDate }),
+				...(data.query?.toDate && { toDate: data.query.toDate }),
+				...(data.query?.minDurationMinutes && { minDurationMinutes: data.query.minDurationMinutes }),
+			},
+		});
 
 		return response.data;
 	} catch (error) {

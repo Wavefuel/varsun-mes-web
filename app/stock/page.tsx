@@ -32,7 +32,8 @@ export default function StockPage() {
 		currentShift,
 	} = useData();
 	const [searchQuery, setSearchQuery] = useState("");
-	const [filterStatus, setFilterStatus] = useState<"All" | "Planned" | "Completed">("All");
+	const [filterOperator, setFilterOperator] = useState<string>("All");
+	const [filterMachine, setFilterMachine] = useState<string>("All");
 	const [showFilters, setShowFilters] = useState(false);
 
 	// Local loading state just for the initial fetch trigger visual
@@ -239,10 +240,23 @@ export default function StockPage() {
 		[lighthouseEnabled, orders, globalAssignments],
 	);
 
+	const machineOptions = useMemo(() => {
+		const machines = Array.from(new Set(sourceOrders.map((o) => o.machine)))
+			.filter(Boolean)
+			.sort();
+		return ["All", ...machines];
+	}, [sourceOrders]);
+
+	const operatorOptions = useMemo(() => {
+		const operators = Array.from(new Set(sourceOrders.map((o) => o.operator)))
+			.filter(Boolean)
+			.sort();
+		return ["All", ...operators];
+	}, [sourceOrders]);
+
 	// Filter Logic
 	const filteredOrders = sourceOrders.filter((order) => {
 		// API already filters by shift range, but we keep it for consistency
-
 		const displayWorkOrder = (order as Order & { workOrder?: string }).workOrder || order.id;
 
 		const matchesSearch =
@@ -251,9 +265,10 @@ export default function StockPage() {
 			order.partNumber.toLowerCase().includes(searchQuery.toLowerCase()) ||
 			displayWorkOrder.toLowerCase().includes(searchQuery.toLowerCase());
 
-		const matchesStatus = filterStatus === "All" || order.status === filterStatus.toUpperCase();
+		const matchesOperator = filterOperator === "All" || order.operator === filterOperator;
+		const matchesMachine = filterMachine === "All" || order.machine === filterMachine;
 
-		return matchesSearch && matchesStatus;
+		return matchesSearch && matchesOperator && matchesMachine;
 	});
 
 	return (
@@ -261,10 +276,10 @@ export default function StockPage() {
 			<AppHeader title="Stock & Inventory" subtitle="Material Management" showDateNavigator={true} />
 
 			{/* Sticky Controls Container */}
-			<div className="sticky top-(--header-height-expanded) z-20 bg-background-dashboard pb-3 px-4">
+			<div className="sticky top-(--header-height-expanded) z-20 bg-background-dashboard pb-2 px-4">
 				{/* Search & Filter Row */}
 				<SearchFilterBar
-					className="mt-3"
+					className="mt-2"
 					searchQuery={searchQuery}
 					onSearchChange={setSearchQuery}
 					placeholder="Search stock..."
@@ -274,22 +289,31 @@ export default function StockPage() {
 
 				{/* Filter Panel */}
 				{showFilters && (
-					<div className="mt-3 animate-in slide-in-from-top-1 fade-in duration-200">
-						<div className="flex gap-2 overflow-x-auto scrollbar-none">
-							{(["All", "Planned", "Completed"] as const).map((status) => (
-								<button
-									key={status}
-									onClick={() => setFilterStatus(status)}
-									className={cn(
-										"h-9 px-4 rounded-lg text-xs font-bold transition-all duration-200 uppercase tracking-wide border",
-										filterStatus === status
-											? "bg-primary border-primary text-white shadow-md shadow-primary/20"
-											: "bg-white border-gray-200 text-gray-500 hover:text-primary hover:border-primary/30 hover:bg-gray-50",
-									)}
-								>
-									{status}
-								</button>
-							))}
+					<div className="mt-2 animate-in slide-in-from-top-1 fade-in duration-200 grid grid-cols-[140px_1fr] gap-3 items-end">
+						<div>
+							<p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 ml-1">Operator</p>
+							<div className="relative">
+								<Select
+									value={filterOperator}
+									onChange={setFilterOperator}
+									options={operatorOptions}
+									placeholder="All"
+									className="w-full h-8 bg-white border-gray-200 shadow-sm text-xs"
+								/>
+							</div>
+						</div>
+
+						<div>
+							<p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 ml-1">Machine</p>
+							<div className="relative">
+								<Select
+									value={filterMachine}
+									onChange={setFilterMachine}
+									options={machineOptions}
+									placeholder="All"
+									className="w-full h-8 bg-white border-gray-200 shadow-sm text-xs"
+								/>
+							</div>
 						</div>
 					</div>
 				)}
@@ -338,28 +362,24 @@ export default function StockPage() {
 									<div className="flex justify-between items-start gap-4">
 										{/* Left Column */}
 										<div className="flex flex-col gap-0.5 flex-1">
-											{/* Header: Machine + Status */}
-											<div className="flex items-center gap-2">
-												<h3 className="list-title">{order.machine}</h3>
-												<div
+											<h3 className="list-title">
+												{displayWorkOrder || "N/A"} • {order.code || "N/A"}
+												<span
 													className={cn(
-														"size-2 rounded-full",
+														"inline-block ml-2 size-2 rounded-full mb-0.5",
 														order.status === "PLANNED"
 															? "bg-status-planned"
 															: order.status === "COMPLETED"
 																? "bg-status-completed"
 																: "bg-status-default",
 													)}
-												></div>
-											</div>
+												/>
+											</h3>
 
-											{/* Part Number • WO */}
 											<p className="list-subtext">
-												{order.partNumber} • {displayWorkOrder}
+												{order.partNumber || "N/A"} • {order.operator || "N/A"}
 											</p>
-
-											{/* Operator */}
-											<p className="list-subtext">{order.operator}</p>
+											<p className="list-subtext">{order.machine || "N/A"}</p>
 										</div>
 
 										{/* Right Column */}

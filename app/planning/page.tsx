@@ -57,7 +57,7 @@ export default function PlanningPage() {
 	} = useData();
 
 	const [searchQuery, setSearchQuery] = useState("");
-	const [filterStatus, setFilterStatus] = useState<"All" | "PLANNED">("All");
+	const [filterOperator, setFilterOperator] = useState<string>("All");
 	const [filterMachine, setFilterMachine] = useState<string>("All");
 	const [showFilters, setShowFilters] = useState(false);
 	const [isDeleteMode, setIsDeleteMode] = useState(false);
@@ -297,9 +297,9 @@ export default function PlanningPage() {
 			item.operator.toLowerCase().includes(searchQuery.toLowerCase()) ||
 			(item.workOrder ?? item.id).toLowerCase().includes(searchQuery.toLowerCase());
 
-		const matchesStatus = filterStatus === "All" || item.status === filterStatus;
+		const matchesOperator = filterOperator === "All" || item.operator === filterOperator;
 		const matchesMachine = filterMachine === "All" || item.machine === filterMachine;
-		return matchesSearch && matchesStatus && matchesMachine;
+		return matchesSearch && matchesOperator && matchesMachine;
 	});
 
 	const toggleSelection = (item: Assignment) => {
@@ -365,17 +365,26 @@ export default function PlanningPage() {
 	};
 
 	const machineOptions = useMemo(() => {
-		const machines = Array.from(new Set(sourceAssignments.map((o) => o.machine))).sort();
+		const machines = Array.from(new Set(sourceAssignments.map((o) => o.machine)))
+			.filter(Boolean)
+			.sort();
 		return ["All", ...machines];
+	}, [sourceAssignments]);
+
+	const operatorOptions = useMemo(() => {
+		const operators = Array.from(new Set(sourceAssignments.map((o) => o.operator)))
+			.filter(Boolean)
+			.sort();
+		return ["All", ...operators];
 	}, [sourceAssignments]);
 
 	return (
 		<div className="flex flex-col min-h-screen bg-background-dashboard pb-24">
 			<AppHeader title="Planning" subtitle="Shift Scheduling" showDateNavigator={true} dateNavigatorDisabled={isDeleteMode} />
 
-			<div className="sticky top-(--header-height-expanded) z-20 bg-background-dashboard pb-3 px-4">
+			<div className="sticky top-(--header-height-expanded) z-20 bg-background-dashboard pb-2 px-4">
 				<SearchFilterBar
-					className="mt-3"
+					className="mt-2"
 					searchQuery={searchQuery}
 					onSearchChange={setSearchQuery}
 					placeholder="Search assignments..."
@@ -384,37 +393,29 @@ export default function PlanningPage() {
 				/>
 
 				{showFilters && (
-					<div className="mt-3 animate-in slide-in-from-top-1 fade-in duration-200 space-y-3">
+					<div className="mt-2 animate-in slide-in-from-top-1 fade-in duration-200 grid grid-cols-[140px_1fr] gap-3 items-end">
 						<div>
-							<p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Status</p>
-							<div className="flex gap-2 overflow-x-auto scrollbar-none pb-1">
-								{["All", "PLANNED"].map((status) => (
-									<button
-										key={status}
-										onClick={() => setFilterStatus(status as "All" | "PLANNED")}
-										className={cn(
-											"h-9 px-4 rounded-lg text-xs font-bold transition-all duration-200 uppercase tracking-wide border",
-											filterStatus === status
-												? "bg-primary border-primary text-white shadow-md shadow-primary/20"
-												: "bg-white border-gray-200 text-gray-500 hover:text-primary hover:border-primary/30 hover:bg-gray-50",
-										)}
-									>
-										{status}
-									</button>
-								))}
+							<p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 ml-1">Operator</p>
+							<div className="relative">
+								<Select
+									value={filterOperator}
+									onChange={setFilterOperator}
+									options={operatorOptions}
+									placeholder="All"
+									className="w-full h-8 bg-white rounded-md text-xs"
+								/>
 							</div>
 						</div>
 
 						<div>
-							<p className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-1.5 ml-1">Machine</p>
+							<p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 ml-1">Machine</p>
 							<div className="relative">
 								<Select
-									label="Machine"
 									value={filterMachine}
 									onChange={setFilterMachine}
 									options={machineOptions}
-									placeholder="Select Machine"
-									className="w-full"
+									placeholder="All"
+									className="w-full h-8 bg-white rounded-md text-xs"
 								/>
 							</div>
 						</div>
@@ -478,26 +479,24 @@ export default function PlanningPage() {
 								>
 									<div className="flex justify-between items-start gap-4">
 										<div className="flex flex-col gap-0.5 flex-1">
-											<div className="flex items-center gap-2">
-												<h3 className="list-title">{displayWorkOrder}</h3>
-												<div
+											<h3 className="list-title">
+												{displayWorkOrder || "N/A"} • {item.code || "N/A"}
+												<span
 													className={cn(
-														"size-2 rounded-full",
+														"inline-block ml-2 size-2 rounded-full mb-0.5",
 														item.status === "PLANNED"
 															? "bg-status-planned"
 															: item.status === "COMPLETED"
 																? "bg-status-completed"
 																: "bg-status-default",
 													)}
-												></div>
-											</div>
+												/>
+											</h3>
 
 											<p className="list-subtext">
-												{item.partNumber} | {item.operator}
+												{item.partNumber || "N/A"} • {item.operator || "N/A"}
 											</p>
-											<p className="list-subtext">
-												{item.machine} | {item.code}
-											</p>
+											<p className="list-subtext">{item.machine || "N/A"}</p>
 										</div>
 
 										<div className="list-metric-column">

@@ -42,7 +42,13 @@ export default function RootLayout({
 			</head>
 			<body className="font-sans antialiased">
 				<FontDebugger />
-				<Toaster position="top-left" richColors closeButton toastOptions={{ duration: 5000, style: { borderRadius: "0px" } }} />
+				<Toaster
+					position="top-center"
+					richColors
+					closeButton
+					toastOptions={{ duration: 5000, style: { borderRadius: "0px", width: "100%" } }}
+					style={{ width: "90%", maxWidth: "440px" }}
+				/>
 				<DataProvider>
 					<div className="mobile-wrapper relative bg-[#F8FAFB] min-h-screen shadow-2xl overflow-hidden max-w-[480px] w-full mx-auto">
 						<AuthGuard />

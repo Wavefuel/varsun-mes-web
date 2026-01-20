@@ -346,6 +346,55 @@ export default function Home() {
 										</div>
 										<Badge>{order.partNumber}</Badge>
 									</div>
+									{/* Progress Bar */}
+									{(() => {
+										const parseDate = (dStr: string, tStr: string, shift: string) => {
+											if (!dStr || !tStr) return 0;
+											const [y, m, d] = dStr.split("-").map(Number);
+											const [time, modifier] = tStr.split(" ");
+											let [h, min] = time.split(":").map(Number);
+											if (modifier === "PM" && h < 12) h += 12;
+											if (modifier === "AM" && h === 12) h = 0;
+
+											const date = new Date(y, m - 1, d, h, min, 0);
+											// If Night shift AND time is AM, it implies next day (crosses midnight)
+											if (String(shift).includes("Night") && modifier === "AM") {
+												date.setDate(date.getDate() + 1);
+											}
+											return date.getTime();
+										};
+
+										const start = parseDate(order.date, order.startTime, order.shift);
+										const end = parseDate(order.date, order.endTime, order.shift);
+										const now = Date.now();
+
+										if (start && end && end > start) {
+											const total = end - start;
+											const elapsed = now - start;
+											let progress = (elapsed / total) * 100;
+											const isOverdue = now > end;
+
+											// Clamp progress
+											const barWidth = Math.max(0, Math.min(100, progress));
+
+											return (
+												<div className="mt-3">
+													<div className="flex justify-between text-2xs font-bold text-gray-400 mb-1">
+														<span>{order.startTime}</span>
+														{isOverdue && <span className="text-red-500">Overdue</span>}
+														<span>{order.endTime}</span>
+													</div>
+													<div className="h-1.5 w-full bg-gray-100 rounded-full overflow-hidden">
+														<div
+															className={`h-full rounded-full transition-all duration-500 ${isOverdue ? "bg-red-500" : "bg-primary"}`}
+															style={{ width: `${barWidth}%` }}
+														/>
+													</div>
+												</div>
+											);
+										}
+										return null;
+									})()}
 								</Card>
 							);
 						})}
