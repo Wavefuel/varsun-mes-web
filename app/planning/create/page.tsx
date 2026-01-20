@@ -786,9 +786,18 @@ function AssignmentForm() {
 						}
 					}
 				}
-			} catch (error) {
+			} catch (error: any) {
 				console.error(error);
-				toast.error(isEditMode ? "Failed to update assignment" : "Failed to save assignment");
+				const respData = error.response?.data;
+				const isOverlapError =
+					(error.response?.status === 409 || respData?.status === 409) &&
+					(respData?.error?.code === 1203 || respData?.message?.includes("Overlapping"));
+
+				if (isOverlapError) {
+					toast.error("In this time range there is already assignment existed so create in new time range");
+				} else {
+					toast.error(isEditMode ? "Failed to update assignment" : "Failed to save assignment");
+				}
 				setIsSaving(false);
 				return;
 			}
@@ -1065,13 +1074,12 @@ function AssignmentForm() {
 															{displayId} • {order.partNumber}
 														</p>
 														<span
-															className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
-																order.status === "ACTIVE"
-																	? "text-green-600 bg-green-50"
-																	: order.status === "ACTUAL_OUTPUT"
-																		? "text-blue-600 bg-blue-50"
-																		: "text-gray-400 bg-gray-50"
-															}`}
+															className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${order.status === "ACTIVE"
+																? "text-green-600 bg-green-50"
+																: order.status === "ACTUAL_OUTPUT"
+																	? "text-blue-600 bg-blue-50"
+																	: "text-gray-400 bg-gray-50"
+																}`}
 														>
 															{order.status}
 														</span>

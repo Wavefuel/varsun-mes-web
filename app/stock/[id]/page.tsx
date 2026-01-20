@@ -648,9 +648,18 @@ function StockEntryForm() {
 					router.push("/stock");
 					return;
 				}
-			} catch (e) {
+			} catch (e: any) {
 				console.error(e);
-				toast.error("Failed to submit completion to Lighthouse");
+				const respData = e.response?.data;
+				const isOverlapError =
+					(e.response?.status === 409 || respData?.status === 409) &&
+					(respData?.error?.code === 1203 || respData?.message?.includes("Overlapping"));
+
+				if (isOverlapError) {
+					toast.error("In this time range there is already assignment existed so create in new time range");
+				} else {
+					toast.error("Failed to submit completion to Lighthouse");
+				}
 				setIsSaving(false);
 				return;
 			}
@@ -892,7 +901,7 @@ function StockEntryForm() {
 									title="Planned Details"
 									icon="assignment"
 									data={formData}
-									onChange={() => {}}
+									onChange={() => { }}
 									readOnly={true}
 									hideHeader={true}
 									devices={devices}
