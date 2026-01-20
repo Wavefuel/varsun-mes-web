@@ -11,7 +11,7 @@ import { Card } from "@/components/ui/Card";
 import { Badge } from "@/components/ui/Badge";
 import { MetricValue, MetricLabel, SectionTitle } from "@/components/ui/Typography";
 
-import { fetchDeviceList, readDeviceStateEventGroupsWithItemsByCluster, type DeviceSummary } from "@/utils/scripts";
+import { fetchDeviceCount, fetchDeviceList, readDeviceStateEventGroupsWithItemsByCluster, type DeviceSummary } from "@/utils/scripts";
 import { formatTimeToIST, getISTDate } from "@/utils/dateUtils";
 import { Assignment } from "@/lib/types";
 
@@ -42,6 +42,8 @@ export default function Home() {
 		globalDataDate,
 		setGlobalDataDate,
 		currentShift,
+		deviceCount,
+		setDeviceCount,
 	} = useData();
 
 	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID;
@@ -72,6 +74,16 @@ export default function Home() {
 				setIsError(true);
 			});
 	}, [globalDevices.length, lighthouseEnabled, lhtClusterId, setGlobalDevices]);
+
+	// Fetch Total Device Count if needed
+	React.useEffect(() => {
+		if (!lighthouseEnabled || !lhtClusterId) return;
+		if (deviceCount !== null) return;
+
+		fetchDeviceCount({ clusterId: lhtClusterId })
+			.then(setDeviceCount)
+			.catch(console.error);
+	}, [deviceCount, lighthouseEnabled, lhtClusterId, setDeviceCount]);
 
 	// Fetch Assignments if needed
 	React.useEffect(() => {
@@ -241,8 +253,8 @@ export default function Home() {
 	const efficiencyValue = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
 	const displayEfficiency = efficiencyValue.toFixed(1) + "%";
 
-	// Active Machines: Unique machines in active orders
-	const activeMachines = new Set(activeOrders.map((o) => o.machine)).size;
+	// Active Machines: Use global device count if available, fallback to active orders count
+	const activeMachinesDisplay = deviceCount !== null ? deviceCount : new Set(activeOrders.map((o) => o.machine)).size;
 
 	if (isError) {
 		return (
@@ -311,7 +323,7 @@ export default function Home() {
 						<div className="flex justify-between items-start mb-2">
 							<span className="material-symbols-outlined text-primary !text-xl !leading-none py-0.5">precision_manufacturing</span>
 						</div>
-						<MetricValue>{activeMachines}</MetricValue>
+						<MetricValue>{activeMachinesDisplay}</MetricValue>
 						<MetricLabel>Machines Active</MetricLabel>
 					</Card>
 					<Card className="p-4">

@@ -39,6 +39,8 @@ interface DataContextType {
 	setGlobalDevices: React.Dispatch<React.SetStateAction<DeviceSummary[]>>;
 	globalDataDate: string | null;
 	setGlobalDataDate: React.Dispatch<React.SetStateAction<string | null>>;
+	deviceCount: number | null;
+	setDeviceCount: React.Dispatch<React.SetStateAction<number | null>>;
 }
 
 const DataContext = createContext<DataContextType | undefined>(undefined);
@@ -61,6 +63,7 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 	const [globalAssignments, setGlobalAssignments] = useState<Assignment[] | null>(null);
 	const [globalDevices, setGlobalDevices] = useState<DeviceSummary[]>([]);
 	const [globalDataDate, setGlobalDataDate] = useState<string | null>(null);
+	const [deviceCount, setDeviceCount] = useState<number | null>(null);
 
 	useEffect(() => {
 		// Load from local storage or use mock
@@ -133,6 +136,8 @@ export function DataProvider({ children }: { children: React.ReactNode }) {
 				setGlobalDevices,
 				globalDataDate,
 				setGlobalDataDate,
+				deviceCount,
+				setDeviceCount,
 			}}
 		>
 			{children}

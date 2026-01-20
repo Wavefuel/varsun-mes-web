@@ -100,9 +100,9 @@ export async function createDeviceStateEventGroup(data: CreateDeviceStateEventGr
 				? buildDayRange(data.body.date)
 				: data.body.rangeStart && data.body.rangeEnd
 					? {
-							rangeStart: formatRangeValue(data.body.rangeStart),
-							rangeEnd: formatRangeValue(data.body.rangeEnd),
-						}
+						rangeStart: formatRangeValue(data.body.rangeStart),
+						rangeEnd: formatRangeValue(data.body.rangeEnd),
+					}
 					: null;
 		if (!range) {
 			throw new Error("Invalid Input, rangeStart/rangeEnd or date is required.");
@@ -397,10 +397,10 @@ export async function updateDeviceStateEventGroup(data: UpdateDeviceStateEventGr
 				group: data.body.group,
 				items: data.body.items
 					? {
-							create: Array.isArray(data.body.items.create) ? data.body.items.create.map(normalizeCreateItemPayload) : undefined,
-							update: Array.isArray(data.body.items.update) ? data.body.items.update.map(normalizeUpdateItemPayload) : undefined,
-							delete: Array.isArray(data.body.items.delete) ? data.body.items.delete : undefined,
-						}
+						create: Array.isArray(data.body.items.create) ? data.body.items.create.map(normalizeCreateItemPayload) : undefined,
+						update: Array.isArray(data.body.items.update) ? data.body.items.update.map(normalizeUpdateItemPayload) : undefined,
+						delete: Array.isArray(data.body.items.delete) ? data.body.items.delete : undefined,
+					}
 					: undefined,
 			},
 			{
@@ -761,19 +761,19 @@ export async function readDeviceStateEventItemsByDate(data: ReadDeviceStateEvent
 
 	const items = Array.isArray(groups)
 		? (groups as unknown[]).flatMap((groupUnknown) => {
-				const group = (groupUnknown && typeof groupUnknown === "object" ? (groupUnknown as Record<string, unknown>) : {}) as Record<
-					string,
-					unknown
-				>;
-				const groupItems = Array.isArray(group?.Items) ? (group.Items as unknown[]) : [];
-				const groupId = group.id;
-				const groupTitle = group.title;
-				return groupItems.map((itemUnknown) => ({
-					...(itemUnknown && typeof itemUnknown === "object" ? (itemUnknown as Record<string, unknown>) : {}),
-					groupId,
-					groupTitle,
-				}));
-			})
+			const group = (groupUnknown && typeof groupUnknown === "object" ? (groupUnknown as Record<string, unknown>) : {}) as Record<
+				string,
+				unknown
+			>;
+			const groupItems = Array.isArray(group?.Items) ? (group.Items as unknown[]) : [];
+			const groupId = group.id;
+			const groupTitle = group.title;
+			return groupItems.map((itemUnknown) => ({
+				...(itemUnknown && typeof itemUnknown === "object" ? (itemUnknown as Record<string, unknown>) : {}),
+				groupId,
+				groupTitle,
+			}));
+		})
 		: [];
 
 	return items;
@@ -819,9 +819,9 @@ export async function fetchDeviceList(data: FetchDeviceListData): Promise<Device
 			},
 			...(data.query?.page &&
 				data.query?.limit && {
-					skip: (data.query.page - 1) * data.query.limit,
-					take: data.query.limit,
-				}),
+				skip: (data.query.page - 1) * data.query.limit,
+				take: data.query.limit,
+			}),
 		});
 
 		return response.data?.data ?? [];
@@ -914,5 +914,24 @@ export async function fetchDeviceStatusPeriods(data: FetchDeviceStatusPeriodsDat
 		return response.data;
 	} catch (error) {
 		throw error;
+	}
+}
+
+/**
+ * Fetches the total count of devices in the cluster.
+ * Used for dashboard metrics.
+ */
+export async function fetchDeviceCount(data: { clusterId: string; applicationId?: string }): Promise<number> {
+	try {
+		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
+		if (!applicationId) throw new Error("Invalid Input, APPLICATION_ID is required.");
+
+		const response = await lightHouseAPIHandler.post(`${data.clusterId}/device/${applicationId}/count`, {
+			where: { clusterId: data.clusterId }
+		});
+		return response.data?.data ?? 0;
+	} catch (error) {
+		console.error("Failed to fetch device count:", error);
+		return 0;
 	}
 }
