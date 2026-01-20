@@ -586,6 +586,41 @@ export async function deleteDeviceStateEventGroupItemsMany(data: DeleteDeviceSta
 	}
 }
 
+export interface DeleteDeviceStateEventGroupItemsManyByClusterData {
+	clusterId: string;
+	applicationId?: string;
+	account: Account;
+	items: { deviceId: string; itemId: string }[];
+}
+
+/**
+ * Deletes multiple items from any Device State Event Group across multiple devices.
+ */
+export async function deleteDeviceStateEventGroupItemsManyByCluster(data: DeleteDeviceStateEventGroupItemsManyByClusterData) {
+	try {
+		if (!data.clusterId) throw new Error("Invalid Input, clusterId is required.");
+		if (!data.account) throw new Error("Invalid Input, account is required.");
+		if (!data.items || data.items.length === 0) {
+			throw new Error("Invalid Input, items array is required and cannot be empty.");
+		}
+
+		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
+		// Use a cluster-level endpoint for bulk deletion across devices
+		const url = `${data.clusterId}/device/${applicationId}/groups/items/delete/many`;
+
+		const response = await lightHouseAPIHandler.delete(url, {
+			data: { items: data.items },
+			headers: {
+				"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
+			},
+		});
+
+		return response.data?.data;
+	} catch (error) {
+		throw error;
+	}
+}
+
 interface DeleteDeviceStateEventGroupData {
 	deviceId: string;
 	clusterId: string;

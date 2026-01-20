@@ -16,6 +16,7 @@ import type { Order, Assignment } from "@/lib/types";
 import {
 	deleteDeviceStateEventGroupItems,
 	deleteDeviceStateEventGroupItemsMany,
+	deleteDeviceStateEventGroupItemsManyByCluster,
 	fetchDeviceList,
 	readDeviceStateEventGroupsWithItemsByCluster,
 	type DeviceSummary,
@@ -329,25 +330,14 @@ export default function PlanningPage() {
 			if (lighthouseEnabled) {
 				const selected = filteredAssignments.filter((a) => selectedIds.includes(selectionKey(a)));
 				const deletions = selected.filter((a) => a.lhtDeviceId && a.lhtGroupId && a.lhtItemId);
-				// Group by deviceId for efficient batch deletion
-				const deletionsByDevice = deletions.reduce(
-					(acc, curr) => {
-						if (!acc[curr.lhtDeviceId!]) {
-							acc[curr.lhtDeviceId!] = [];
-						}
-						acc[curr.lhtDeviceId!].push(curr.lhtItemId!);
-						return acc;
-					},
-					{} as Record<string, string[]>,
-				);
+				const itemsToDelete = deletions.map((a) => ({ deviceId: a.lhtDeviceId!, itemId: a.lhtItemId! }));
 
-				for (const [deviceId, itemIds] of Object.entries(deletionsByDevice)) {
-					await deleteDeviceStateEventGroupItemsMany({
-						deviceId,
+				if (itemsToDelete.length > 0) {
+					await deleteDeviceStateEventGroupItemsManyByCluster({
 						clusterId: lhtClusterId!,
 						applicationId: lhtApplicationId!,
 						account: { id: lhtAccountId! },
-						itemIds,
+						items: itemsToDelete,
 					});
 				}
 				toast.success(`Deleted ${deletions.length} items`);
@@ -465,9 +455,9 @@ export default function PlanningPage() {
 						/>
 					</div>
 				) : isLoading ||
-				  (lighthouseEnabled && globalAssignments === null) ||
-				  globalDataDate !== `${currentDate}:${currentShift}` ||
-				  (lighthouseEnabled && !globalDevices.length) ? (
+					(lighthouseEnabled && globalAssignments === null) ||
+					globalDataDate !== `${currentDate}:${currentShift}` ||
+					(lighthouseEnabled && !globalDevices.length) ? (
 					<div className="flex-1 flex flex-col justify-center">
 						<Loader />
 					</div>
