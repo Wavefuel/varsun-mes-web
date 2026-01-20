@@ -13,6 +13,7 @@ import { useData } from "@/context/DataContext";
 import AppHeader from "@/components/AppHeader";
 import SearchFilterBar from "@/components/SearchFilterBar";
 import Loader from "@/components/Loader";
+import Select from "@/components/ui/Select";
 
 import { fetchDeviceList, type DeviceSummary } from "@/utils/scripts";
 import { formatTimeToIST } from "@/utils/dateUtils";
@@ -45,6 +46,7 @@ interface DowntimeEvent {
 	notes: string;
 	metadataText: string;
 	tagsText: string;
+	isOngoing: boolean;
 }
 
 const formatDuration = (minutes: number) => {
@@ -162,6 +164,8 @@ export default function MachineTaggingPage() {
 
 	const [searchQuery, setSearchQuery] = useState("");
 	const [showFilters, setShowFilters] = useState(false);
+	const [filterStatus, setFilterStatus] = useState<string>("All");
+	const [filterTagged, setFilterTagged] = useState<string>("All");
 	const [events, setEvents] = useState<DowntimeEvent[]>([]);
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
@@ -315,6 +319,7 @@ export default function MachineTaggingPage() {
 						notes: matchedItem?.notes ?? "",
 						metadataText,
 						tagsText,
+						isOngoing: period.isOngoing,
 					};
 				});
 
@@ -371,6 +376,13 @@ export default function MachineTaggingPage() {
 
 	// Removed early return for isError to preserve header
 
+	const statusOptions = React.useMemo(() => {
+		const statuses = Array.from(new Set(events.map((e) => e.type)))
+			.filter(Boolean)
+			.sort();
+		return ["All", ...statuses];
+	}, [events]);
+
 	// Filter Logic
 	const filteredEvents = events.filter((e) => {
 		const isDateMatch = e.date === currentDate;
@@ -379,7 +391,13 @@ export default function MachineTaggingPage() {
 			(e.reason && e.reason.toLowerCase().includes(searchQuery.toLowerCase())) ||
 			e.startTime.includes(searchQuery);
 
-		return isDateMatch && isSearchMatch;
+		const matchesStatus = filterStatus === "All" || e.type === filterStatus;
+
+		const isTagged = !!e.reason;
+		const matchesTagged =
+			filterTagged === "All" || (filterTagged === "Tagged" && isTagged) || (filterTagged === "Untagged" && !isTagged);
+
+		return isDateMatch && isSearchMatch && !e.isOngoing && matchesStatus && matchesTagged;
 	});
 
 	const handleReasonSaved = (eventId: string, updates: Record<string, unknown>) => {
@@ -453,6 +471,35 @@ export default function MachineTaggingPage() {
 								showFilters={showFilters}
 								onToggleFilters={() => setShowFilters(!showFilters)}
 							/>
+
+							{showFilters && (
+								<div className="mt-2 animate-in slide-in-from-top-1 fade-in duration-200 grid grid-cols-2 gap-3">
+									<div>
+										<p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 ml-1">Status</p>
+										<div className="relative">
+											<Select
+												value={filterStatus}
+												onChange={setFilterStatus}
+												options={statusOptions}
+												placeholder="All"
+												className="w-full h-8 bg-white rounded-md text-xs"
+											/>
+										</div>
+									</div>
+									<div>
+										<p className="text-[10px] font-bold text-gray-400 uppercase tracking-wider mb-1 ml-1">Tag Status</p>
+										<div className="relative">
+											<Select
+												value={filterTagged}
+												onChange={setFilterTagged}
+												options={["All", "Tagged", "Untagged"]}
+												placeholder="All"
+												className="w-full h-8 bg-white rounded-md text-xs"
+											/>
+										</div>
+									</div>
+								</div>
+							)}
 						</div>
 					)}
 
