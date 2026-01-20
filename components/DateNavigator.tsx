@@ -1,6 +1,6 @@
 "use client";
 
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import CustomDatePicker from "./CustomDatePicker";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -30,10 +30,42 @@ export default function DateNavigator({
 	const data = useData();
 
 	// Support both prop-driven and context-driven usage
-	const date = propDate ?? data.currentDate;
-	const setDate = propSetDate ?? data.setCurrentDate;
-	const shift = propShift ?? data.currentShift;
-	const setShift = propSetShift ?? data.setCurrentShift;
+	const derivedDate = propDate ?? data.currentDate;
+	const derivedSetDate = propSetDate ?? data.setCurrentDate;
+	const derivedShift = propShift ?? data.currentShift;
+	const derivedSetShift = propSetShift ?? data.setCurrentShift;
+
+	// Local state for immediate UI updates
+	const [localDate, setLocalDate] = useState(derivedDate);
+	const [localShift, setLocalShift] = useState(derivedShift);
+	const timeoutRef = useRef<any>(null);
+
+	// Sync local state when external props change (unless we are driving it?)
+	// To avoid conflict, we only sync if the values differ and we might assume external source of truth updates eventually.
+	// But simply syncing is the standard pattern for "controlled component with internal buffer".
+	useEffect(() => {
+		setLocalDate(derivedDate);
+	}, [derivedDate]);
+
+	useEffect(() => {
+		setLocalShift(derivedShift);
+	}, [derivedShift]);
+
+	const debouncedUpdate = (newDate: string, newShift: "Day" | "Night") => {
+		if (timeoutRef.current) {
+			clearTimeout(timeoutRef.current);
+		}
+		timeoutRef.current = setTimeout(() => {
+			derivedSetDate?.(newDate);
+			derivedSetShift?.(newShift);
+		}, 600);
+	};
+
+	const updateState = (newDate: string, newShift: "Day" | "Night") => {
+		setLocalDate(newDate);
+		setLocalShift(newShift);
+		debouncedUpdate(newDate, newShift);
+	};
 
 	const getDisplayDate = (dateStr: string) => {
 		const d = new Date(dateStr);
@@ -47,25 +79,33 @@ export default function DateNavigator({
 	};
 
 	const handlePrevDate = () => {
-		if (shift === "Night") {
-			setShift("Day");
+		let newDate = localDate;
+		let newShift = localShift;
+
+		if (localShift === "Night") {
+			newShift = "Day";
 		} else {
-			const d = new Date(date);
+			const d = new Date(localDate);
 			d.setDate(d.getDate() - 1);
-			setDate(d.toISOString().split("T")[0]);
-			setShift("Night");
+			newDate = d.toISOString().split("T")[0];
+			newShift = "Night";
 		}
+		updateState(newDate, newShift);
 	};
 
 	const handleNextDate = () => {
-		if (shift === "Day") {
-			setShift("Night");
+		let newDate = localDate;
+		let newShift = localShift;
+
+		if (localShift === "Day") {
+			newShift = "Night";
 		} else {
-			const d = new Date(date);
+			const d = new Date(localDate);
 			d.setDate(d.getDate() + 1);
-			setDate(d.toISOString().split("T")[0]);
-			setShift("Day");
+			newDate = d.toISOString().split("T")[0];
+			newShift = "Day";
 		}
+		updateState(newDate, newShift);
 	};
 
 	return (
@@ -73,10 +113,10 @@ export default function DateNavigator({
 			{/* Left: Date Picker */}
 			<div className="flex items-center gap-2">
 				<CustomDatePicker
-					value={date}
-					onChange={setDate}
-					currentShift={shift}
-					onShiftChange={setShift}
+					value={localDate}
+					onChange={(d) => updateState(d, localShift)}
+					currentShift={localShift}
+					onShiftChange={(s) => updateState(localDate, s)}
 					disabled={disabled}
 					customInput={
 						<button
@@ -85,7 +125,7 @@ export default function DateNavigator({
 						>
 							<span className="material-symbols-outlined !text-sm text-primary">calendar_today</span>
 							<span className="text-xs font-bold text-primary uppercase tracking-wider">
-								{getDisplayDate(date)} - {shift === "Day" ? "DAY SHIFT" : "NIGHT SHIFT"}
+								{getDisplayDate(localDate)} - {localShift === "Day" ? "DAY SHIFT" : "NIGHT SHIFT"}
 							</span>
 						</button>
 					}

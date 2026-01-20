@@ -80,9 +80,7 @@ export default function Home() {
 		if (!lighthouseEnabled || !lhtClusterId) return;
 		if (deviceCount !== null) return;
 
-		fetchDeviceCount({ clusterId: lhtClusterId })
-			.then(setDeviceCount)
-			.catch(console.error);
+		fetchDeviceCount({ clusterId: lhtClusterId }).then(setDeviceCount).catch(console.error);
 	}, [deviceCount, lighthouseEnabled, lhtClusterId, setDeviceCount]);
 
 	// Fetch Assignments if needed
@@ -244,14 +242,16 @@ export default function Home() {
 	const formatNumber = (num: number) => {
 		if (num >= 1000000) return (num / 1000000).toFixed(1) + "M";
 		if (num >= 1000) return (num / 1000).toFixed(1) + "K";
-		return num.toString();
+		return num.toString().padStart(2, "0");
 	};
 
-	const displayProjected = `${formatNumber(totalActual)} / ${formatNumber(totalTarget)}`;
+	const displayProjected = `${formatNumber(totalActual)}/${formatNumber(totalTarget)}`;
 
 	// Efficiency: (Actual / Target) * 100
 	const efficiencyValue = totalTarget > 0 ? (totalActual / totalTarget) * 100 : 0;
 	const displayEfficiency = efficiencyValue.toFixed(1) + "%";
+
+	const activeMachines = new Set(activeOrders.map((o) => o.machine)).size;
 
 	// Active Machines: Use global device count if available, fallback to active orders count
 	const activeMachinesDisplay = deviceCount !== null ? deviceCount : new Set(activeOrders.map((o) => o.machine)).size;
@@ -306,7 +306,7 @@ export default function Home() {
 						<div className="flex justify-between items-start mb-2">
 							<span className="material-symbols-outlined text-primary !text-xl !leading-none py-0.5">assignment</span>
 						</div>
-						<MetricValue>{activeCount}</MetricValue>
+						<MetricValue>{formatNumber(activeCount)}</MetricValue>
 						<MetricLabel>Active Work Orders</MetricLabel>
 					</Card>
 					<Card className="p-4">
@@ -323,7 +323,9 @@ export default function Home() {
 						<div className="flex justify-between items-start mb-2">
 							<span className="material-symbols-outlined text-primary !text-xl !leading-none py-0.5">precision_manufacturing</span>
 						</div>
-						<MetricValue>{activeMachinesDisplay}</MetricValue>
+						<MetricValue>
+							{formatNumber(activeMachines)}/{formatNumber(activeMachinesDisplay)}
+						</MetricValue>
 						<MetricLabel>Machines Active</MetricLabel>
 					</Card>
 					<Card className="p-4">
