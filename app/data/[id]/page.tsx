@@ -47,6 +47,15 @@ interface DowntimeEvent {
 	tagsText: string;
 }
 
+const formatDuration = (minutes: number) => {
+	const h = Math.floor(minutes / 60);
+	const m = Math.round(minutes % 60);
+	if (h > 0) {
+		return `${h}h${m > 0 ? ` ${m}min` : ""}`;
+	}
+	return `${m}min`;
+};
+
 const buildUtcRangeFromIstDate = (dateStr: string, currentShift: string) => {
 	const [year, month, day] = dateStr.split("-").map(Number);
 	const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
@@ -244,14 +253,14 @@ export default function MachineTaggingPage() {
 				});
 				const groupItems = Array.isArray(groups)
 					? (groups as any[]).flatMap((group: any) => {
-							const items = Array.isArray(group?.Items) ? group.Items : [];
-							return items.map((item: any) => ({
-								...item,
-								groupId: group.id,
-								groupTags: Array.isArray(group.tags) ? group.tags : [],
-								annotationType: group?.metadata?.annotationType,
-							}));
-						})
+						const items = Array.isArray(group?.Items) ? group.Items : [];
+						return items.map((item: any) => ({
+							...item,
+							groupId: group.id,
+							groupTags: Array.isArray(group.tags) ? group.tags : [],
+							annotationType: group?.metadata?.annotationType,
+						}));
+					})
 					: [];
 
 				console.log("API Response:", result);
@@ -295,7 +304,7 @@ export default function MachineTaggingPage() {
 						rawEndTime: period.endTime ?? new Date().toISOString(),
 						startTime: convertUTCToIST(period.startTime),
 						endTime: period.isOngoing ? "now" : convertUTCToIST(period.endTime),
-						duration: `${Math.round(actualDurationMinutes)}m`,
+						duration: formatDuration(actualDurationMinutes),
 						type: period.status,
 						durationMinutes: actualDurationMinutes,
 						itemId: matchedItem?.id ?? null,
@@ -342,12 +351,6 @@ export default function MachineTaggingPage() {
 			offlineCount: offlinePeriods.length,
 			totalOfflineMinutes,
 		});
-
-		const formatDuration = (minutes: number) => {
-			const hours = Math.floor(minutes / 60);
-			const mins = Math.round(minutes % 60);
-			return `${hours}h ${mins}m`;
-		};
 
 		return {
 			totalRunning: formatDuration(totalRunningMinutes),
@@ -616,19 +619,19 @@ function EventCard({
 			const rangeEndMs = toDateUTC.getTime();
 			const matchingGroup = Array.isArray(existingGroups)
 				? existingGroups.find((group) => {
-						const startMs = group?.rangeStart ? new Date(group.rangeStart).getTime() : NaN;
-						const endMs = group?.rangeEnd ? new Date(group.rangeEnd).getTime() : NaN;
+					const startMs = group?.rangeStart ? new Date(group.rangeStart).getTime() : NaN;
+					const endMs = group?.rangeEnd ? new Date(group.rangeEnd).getTime() : NaN;
 
-						// Check metadata for annotationType: 'event'
-						// We treat 'null' metadata as valid for legacy reasons?
-						// NO, user said: "if any item didnot match we create group and item if any group and item is there with that we update group"
-						// AND "check in that metadat is annoationstype is event"
-						// So we MUST strictly match annotationType === 'event'.
-						const meta = group?.metadata as Record<string, unknown> | undefined;
-						const isEventGroup = meta?.annotationType === "event";
+					// Check metadata for annotationType: 'event'
+					// We treat 'null' metadata as valid for legacy reasons?
+					// NO, user said: "if any item didnot match we create group and item if any group and item is there with that we update group"
+					// AND "check in that metadat is annoationstype is event"
+					// So we MUST strictly match annotationType === 'event'.
+					const meta = group?.metadata as Record<string, unknown> | undefined;
+					const isEventGroup = meta?.annotationType === "event";
 
-						return startMs === rangeStartMs && endMs === rangeEndMs && isEventGroup;
-					})
+					return startMs === rangeStartMs && endMs === rangeEndMs && isEventGroup;
+				})
 				: null;
 
 			const itemPayload: DeviceStateEventItemInput = {
@@ -780,16 +783,7 @@ function EventCard({
 							Add more details
 						</Link>
 						<div className="flex gap-2">
-							<button
-								onClick={(e) => {
-									e.stopPropagation();
-									setIsExpanded(false);
-								}}
-								disabled={isSaving}
-								className="px-3 py-1.5 text-xs font-bold text-gray-500 hover:text-gray-700 hover:bg-gray-50 rounded-lg transition-colors disabled:opacity-50 disabled:pointer-events-none"
-							>
-								CANCEL
-							</button>
+
 							<button
 								onClick={handleSave}
 								disabled={isSaving}

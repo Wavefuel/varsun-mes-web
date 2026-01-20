@@ -513,7 +513,7 @@ export default function EventGroupingPage() {
 							<div className="space-y-1.5">
 								<label className="block text-[11px] font-bold text-gray-500 uppercase ml-1">Reason Code</label>
 								<ReasonCodeSelect value={reason} onChange={setReason} eventType={eventData.type} />
-								{reason ? <p className="text-[10px] font-semibold text-gray-600">{getReasonLabel(reason)}</p> : null}
+
 							</div>
 
 							{/* Metadata */}
