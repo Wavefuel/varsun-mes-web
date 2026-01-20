@@ -323,6 +323,7 @@ export default function EventGroupingPage() {
 					body: {
 						rangeStart: fromDateUTC.toISOString(),
 						rangeEnd: toDateUTC.toISOString(),
+						title: `Event-${fromDateUTC.toISOString().split("T")[0]}-${toDateUTC.toISOString().split("T")[0]}`,
 						tags: tagsText.trim()
 							? tagsText
 								.split(",")

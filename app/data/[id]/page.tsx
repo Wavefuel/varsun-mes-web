@@ -627,6 +627,7 @@ function EventCard({
 					body: {
 						rangeStart: fromDateUTC.toISOString(),
 						rangeEnd: toDateUTC.toISOString(),
+						title: `Event-${fromDateUTC.toISOString().split("T")[0]}-${toDateUTC.toISOString().split("T")[0]}`,
 						metadata: { annotationType: "event" },
 						items: [itemPayload],
 					},
