@@ -154,7 +154,8 @@ export default function EventGroupingPage() {
 					const periodEndIso = normalizeIso(period.endTime ?? new Date().toISOString());
 
 					// 1. Try to find a match specifically from an "Event" group
-					let matchedItem = groupItems.find((item) => {
+					// STRICT MATCHING: Only consider items from "Event" groups.
+					const matchedItem = groupItems.find((item) => {
 						const itemStartMs = new Date(item.segmentStart).getTime();
 						const itemEndMs = new Date(item.segmentEnd).getTime();
 						const periodStartMs = new Date(period.startTime).getTime();
@@ -167,20 +168,6 @@ export default function EventGroupingPage() {
 						const isEventGroup = (item.groupMetadata as any)?.annotationType === "event";
 						return startMatch && endMatch && isEventGroup;
 					});
-
-					// 2. Fallback: Find any match (e.g. from legacy groups or other sources)
-					if (!matchedItem) {
-						matchedItem = groupItems.find((item) => {
-							const itemStartMs = new Date(item.segmentStart).getTime();
-							const itemEndMs = new Date(item.segmentEnd).getTime();
-							const periodStartMs = new Date(period.startTime).getTime();
-							const periodEndMs = new Date(period.endTime ?? new Date()).getTime();
-
-							const startMatch = Math.abs(itemStartMs - periodStartMs) < 1000;
-							const endMatch = Math.abs(itemEndMs - periodEndMs) < 1000;
-							return startMatch && endMatch;
-						});
-					}
 					const reasonCode = matchedItem?.metadata?.reasonCode ?? matchedItem?.notes ?? "";
 					const tagsValue = (matchedItem?.metadata?.Tags ?? matchedItem?.metadata?.tags ?? "") as string;
 					return {

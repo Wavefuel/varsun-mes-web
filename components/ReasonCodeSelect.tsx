@@ -37,10 +37,10 @@ export const OFFLINE_REASON_CODES: ReasonCodeEntry[] = [
 ];
 
 export const ONLINE_REASON_CODES: ReasonCodeEntry[] = [
-	{ code: "31", description: "Load", category: "ONLINE" },
-	{ code: "32", description: "No Load", category: "ONLINE" },
-	{ code: "33", description: "High Speed", category: "ONLINE" },
-	{ code: "34", description: "Low Speed", category: "ONLINE" },
+	{ code: "31", description: "Load", category: "PRODUCTION_RUN" },
+	{ code: "32", description: "No Load", category: "PERFORMANCE" },
+	{ code: "33", description: "High Speed", category: "PERFORMANCE" },
+	{ code: "34", description: "Low Speed", category: "PERFORMANCE" },
 ];
 
 export const UNAVAILABLE_REASON_CODES: ReasonCodeEntry[] = [

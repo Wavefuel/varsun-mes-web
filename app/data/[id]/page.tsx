@@ -207,6 +207,7 @@ export default function MachineTaggingPage() {
 							...item,
 							groupId: group.id,
 							groupTags: Array.isArray(group.tags) ? group.tags : [],
+							annotationType: group?.metadata?.annotationType,
 						}));
 					})
 					: [];
@@ -229,10 +230,15 @@ export default function MachineTaggingPage() {
 
 					const periodStartIso = normalizeIso(period.startTime);
 					const periodEndIso = normalizeIso(period.endTime ?? new Date().toISOString());
+
+					// 1. Prioritize finding an item from an "Event" group
+					// STRICT MATCHING: Only consider items from "Event" groups.
+					// If not found, we treat it as no event group linked (prevents linking to Production groups).
 					const matchedItem = groupItems.find((item: any) => {
 						const itemStart = normalizeIso(item.segmentStart);
 						const itemEnd = normalizeIso(item.segmentEnd);
-						return itemStart === periodStartIso && itemEnd === periodEndIso;
+						const isEventGroup = item.annotationType === "event";
+						return itemStart === periodStartIso && itemEnd === periodEndIso && isEventGroup;
 					});
 					const reasonCode = matchedItem?.metadata?.reasonCode ?? matchedItem?.notes ?? "";
 
