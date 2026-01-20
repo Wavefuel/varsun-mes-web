@@ -48,8 +48,8 @@ export default function AppHeader({ title, subtitle, showDateNavigator = false, 
 						{rightElement ? (
 							rightElement
 						) : (
-							<button onClick={handleLogout} className="p-1 rounded-md active:scale-95 transition-transform hover:bg-gray-50">
-								<span className="material-symbols-outlined header-icon text-primary">logout</span>
+							<button onClick={handleLogout} className="p-0.5 rounded-md active:scale-75 transition-transform hover:bg-gray-50 flex items-center justify-center">
+								<span className="material-symbols-outlined !text-[19px] text-primary">logout</span>
 							</button>
 						)}
 					</div>
