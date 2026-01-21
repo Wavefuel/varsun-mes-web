@@ -364,16 +364,6 @@ export default function MachineTaggingPage() {
 		};
 	}, [events]);
 
-	// Ensure conditional return is AFTER all hooks
-	// Ensure conditional return is AFTER all hooks
-	if (isLoading) {
-		return (
-			<div className="flex bg-background-dashboard min-h-screen items-center justify-center">
-				<Loader />
-			</div>
-		);
-	}
-
 	// Removed early return for isError to preserve header
 
 	const statusOptions = React.useMemo(() => {
@@ -382,6 +372,15 @@ export default function MachineTaggingPage() {
 			.sort();
 		return ["All", ...statuses];
 	}, [events]);
+
+	// Initialize conditional return logic here to prevent hook violation
+	if (isLoading) {
+		return (
+			<div className="flex bg-background-dashboard min-h-screen items-center justify-center">
+				<Loader />
+			</div>
+		);
+	}
 
 	// Filter Logic
 	const filteredEvents = events.filter((e) => {
