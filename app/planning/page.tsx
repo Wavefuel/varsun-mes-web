@@ -63,6 +63,7 @@ export default function PlanningPage() {
 	const [isDeleteMode, setIsDeleteMode] = useState(false);
 	const [selectedIds, setSelectedIds] = useState<string[]>([]);
 	const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+	const [isDeleting, setIsDeleting] = useState(false);
 
 	const [selectedDeviceId] = useState<string>("ALL");
 
@@ -325,6 +326,7 @@ export default function PlanningPage() {
 	};
 
 	const confirmDelete = async () => {
+		setIsDeleting(true);
 		try {
 			if (lighthouseEnabled) {
 				const selected = filteredAssignments.filter((a) => selectedIds.includes(selectionKey(a)));
@@ -356,6 +358,7 @@ export default function PlanningPage() {
 			setSelectedIds([]);
 			setIsDeleteMode(false);
 			setShowDeleteConfirm(false);
+			setIsDeleting(false);
 		}
 	};
 
@@ -612,14 +615,20 @@ export default function PlanningPage() {
 							<button
 								onClick={() => setShowDeleteConfirm(false)}
 								className="flex-1 h-11 flex items-center justify-center rounded-xl bg-background-dashboard text-gray-600 font-bold text-sm hover:bg-gray-100 transition-colors"
+								disabled={isDeleting}
 							>
 								Cancel
 							</button>
 							<button
 								onClick={confirmDelete}
-								className="flex-1 h-11 flex items-center justify-center rounded-xl bg-destructive text-white font-bold text-sm hover:bg-red-600 shadow-md transition-all active:scale-95"
+								className="flex-1 h-11 flex items-center justify-center rounded-xl bg-destructive text-white font-bold text-sm hover:bg-red-600 shadow-md transition-all active:scale-95 disabled:opacity-70 disabled:pointer-events-none"
+								disabled={isDeleting}
 							>
-								Delete
+								{isDeleting ? (
+									<div className="h-3 w-3 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+								) : (
+									"Delete"
+								)}
 							</button>
 						</div>
 					</div>
