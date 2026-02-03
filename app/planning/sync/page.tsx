@@ -9,9 +9,8 @@ import { twMerge } from "tailwind-merge";
 import Loader from "@/components/Loader";
 import { useData } from "@/context/DataContext";
 import {
-	createDeviceStateEventGroup,
-	createDeviceStateEventGroupItems,
-	updateDeviceStateEventGroupItems,
+	createDeviceStateEventGroupsManyByCluster,
+	updateDeviceStateEventGroupsManyByCluster,
 	deleteDeviceStateEventGroupItemsManyByCluster,
 } from "@/utils/scripts";
 import { fetchErpSchedule } from "@/app/actions/erp";
@@ -228,19 +227,18 @@ export default function PlanningSyncPage() {
 				updateCount = 0,
 				deleteCount = 0;
 
-			// Updates
-			for (const item of updates) {
+			// Updates + Adds-to-existing-groups (single bulk call)
+			const updateGroups = updates.map((item) => {
 				const p = item.payload;
-				await updateDeviceStateEventGroupItems({
-					clusterId: lhtClusterId!,
-					applicationId: lhtApplicationId!,
+				return {
 					deviceId: p.deviceId,
-					account: { id: lhtAccountId! },
 					groupId: p.groupId,
-					items: p.items,
-				});
-				updateCount++;
-			}
+					items: { update: p.items },
+				};
+			});
+
+			const addItemsByGroup = new Map<string, { deviceId: string; groupId: string; items: any[] }>();
+			const createGroups: any[] = [];
 
 			// Deletes
 			const deleteItems = deletes.map((d) => ({ deviceId: d.payload.deviceId, itemId: d.payload.itemId }));
@@ -254,7 +252,7 @@ export default function PlanningSyncPage() {
 				deleteCount = deleteItems.length;
 			}
 
-			// Adds
+			// Adds (split into create-items vs create-groups)
 			for (const item of adds) {
 				const { deviceId, metadata, startIso, endIso } = item.payload;
 
@@ -267,12 +265,21 @@ export default function PlanningSyncPage() {
 				);
 
 				if (targetGroup?.lhtGroupId) {
-					await createDeviceStateEventGroupItems({
-						clusterId: lhtClusterId!,
-						applicationId: lhtApplicationId!,
+					const key = `${deviceId}:${targetGroup.lhtGroupId}`;
+					const entry = addItemsByGroup.get(key) ?? { deviceId, groupId: targetGroup.lhtGroupId, items: [] };
+					entry.items.push({
+						segmentStart: startIso,
+						segmentEnd: endIso,
+						category: "PLANNED_OUTPUT",
+						metadata,
+					});
+					addItemsByGroup.set(key, entry);
+				} else {
+					createGroups.push({
 						deviceId,
-						account: { id: lhtAccountId! },
-						groupId: targetGroup.lhtGroupId,
+						rangeStart: startIso,
+						rangeEnd: endIso,
+						title: `PLANNED_OUTPUT-${currentDate}`,
 						items: [
 							{
 								segmentStart: startIso,
@@ -282,29 +289,36 @@ export default function PlanningSyncPage() {
 							},
 						],
 					});
-				} else {
-					await createDeviceStateEventGroup({
-						clusterId: lhtClusterId!,
-						applicationId: lhtApplicationId!,
-						deviceId,
-						account: { id: lhtAccountId! },
-						body: {
-							rangeStart: startIso,
-							rangeEnd: endIso,
-							title: `PLANNED_OUTPUT-${currentDate}`,
-							items: [
-								{
-									segmentStart: startIso,
-									segmentEnd: endIso,
-									category: "PLANNED_OUTPUT",
-									metadata,
-								},
-							],
-						},
-					});
 				}
-				addCount++;
 			}
+
+			const addItemGroups = Array.from(addItemsByGroup.values()).map((group) => ({
+				deviceId: group.deviceId,
+				groupId: group.groupId,
+				items: { create: group.items },
+			}));
+
+			const updateManyGroups = [...updateGroups, ...addItemGroups];
+			if (updateManyGroups.length > 0) {
+				await updateDeviceStateEventGroupsManyByCluster({
+					clusterId: lhtClusterId!,
+					applicationId: lhtApplicationId!,
+					account: { id: lhtAccountId! },
+					groups: updateManyGroups,
+				});
+			}
+
+			if (createGroups.length > 0) {
+				await createDeviceStateEventGroupsManyByCluster({
+					clusterId: lhtClusterId!,
+					applicationId: lhtApplicationId!,
+					account: { id: lhtAccountId! },
+					groups: createGroups,
+				});
+			}
+
+			addCount = adds.length;
+			updateCount = updates.length;
 
 			toast.success(`Synced: +${addCount}, ~${updateCount}, -${deleteCount}`);
 			setGlobalDataDate(""); // Force refresh

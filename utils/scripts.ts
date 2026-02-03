@@ -47,6 +47,25 @@ export interface CreateDeviceStateEventGroupData {
 	};
 }
 
+export interface CreateDeviceStateEventGroupsManyByClusterData {
+	clusterId: string;
+	applicationId?: string;
+	account: Account;
+	groups: Array<{
+		deviceId: string;
+		rangeStart?: Date | string;
+		rangeEnd?: Date | string;
+		date?: Date | string;
+		title?: string | null;
+		description?: string | null;
+		notes?: string | null;
+		metadata?: JsonValue;
+		tags?: string[] | null;
+		items: DeviceStateEventItemInput[];
+		body?: CreateDeviceStateEventGroupData["body"];
+	}>;
+}
+
 /**
  * Creates a Device State Event Group along with its items in a single API call.
  * Items are created within the same transaction as the group.
@@ -149,6 +168,99 @@ export async function createDeviceStateEventGroup(data: CreateDeviceStateEventGr
 	}
 }
 
+/**
+ * Creates multiple Device State Event Groups across devices in a single API call.
+ *
+ * @param data - The data required to create groups and items
+ * @returns The created groups with per-index status
+ */
+export async function createDeviceStateEventGroupsManyByCluster(data: CreateDeviceStateEventGroupsManyByClusterData) {
+	try {
+		if (!data.clusterId) {
+			throw new Error("Invalid Input, clusterId is required.");
+		}
+		if (!data.account) {
+			throw new Error("Invalid Input, account is required.");
+		}
+		if (!data.groups || data.groups.length === 0) {
+			throw new Error("Invalid Input, groups array is required and cannot be empty.");
+		}
+
+		const groupsPayload = data.groups.map((group, index) => {
+			if (!group.deviceId) {
+				throw new Error(`Invalid Input, deviceId is required at index ${index}.`);
+			}
+			const body = group.body ?? group;
+			if (!body.items || body.items.length === 0) {
+				throw new Error(`Invalid Input, items array is required at index ${index}.`);
+			}
+
+			const range =
+				body.date !== undefined
+					? buildDayRange(body.date)
+					: body.rangeStart && body.rangeEnd
+						? {
+							rangeStart: formatRangeValue(body.rangeStart),
+							rangeEnd: formatRangeValue(body.rangeEnd),
+						}
+						: null;
+			if (!range) {
+				throw new Error(`Invalid Input, rangeStart/rangeEnd or date is required at index ${index}.`);
+			}
+
+			const baseDate = body.date ?? body.rangeStart;
+			const normalizedItems = body.items.map((item) => {
+				const segmentStart = resolveDateTimeValue(item.startTime ?? item.segmentStart, baseDate);
+				const segmentEnd = resolveDateTimeValue(item.endTime ?? item.segmentEnd, baseDate);
+				if (!segmentStart || !segmentEnd) {
+					throw new Error(`Invalid Input, segmentStart and segmentEnd are required at index ${index}.`);
+				}
+				return normalizeCreateItemPayload({
+					...item,
+					segmentStart,
+					segmentEnd,
+					startTime: undefined,
+					endTime: undefined,
+				});
+			});
+
+			const rangeStartLabel = formatDateOnly(range.rangeStart);
+			const rangeEndLabel = formatDateOnly(range.rangeEnd);
+			const autoTitle = rangeStartLabel === rangeEndLabel ? rangeStartLabel : `${rangeStartLabel}-${rangeEndLabel}`;
+			const title = body.title && body.title.trim() ? body.title : autoTitle;
+
+			return {
+				deviceId: group.deviceId,
+				rangeStart: range.rangeStart,
+				rangeEnd: range.rangeEnd,
+				title,
+				description: body.description,
+				notes: body.notes,
+				metadata: body.metadata,
+				tags: body.tags,
+				items: normalizedItems,
+			};
+		});
+
+		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
+		const url = `${data.clusterId}/device/${applicationId}/groups/create/many`;
+
+		const response = await lightHouseAPIHandler.post(
+			url,
+			{ groups: groupsPayload },
+			{
+				headers: {
+					"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
+				},
+			},
+		);
+
+		return response.data?.data;
+	} catch (error) {
+		throw error;
+	}
+}
+
 export interface DeviceStateEventItemUpdateInput {
 	id: string;
 	segmentStart?: Date | string;
@@ -192,6 +304,26 @@ export interface UpdateDeviceStateEventGroupData {
 			delete?: string[];
 		};
 	};
+}
+
+export interface UpdateDeviceStateEventGroupsManyByClusterData {
+	clusterId: string;
+	applicationId?: string;
+	account: Account;
+	groups: Array<{
+		deviceId: string;
+		groupId: string;
+		group?: UpdateDeviceStateEventGroupData["body"]["group"];
+		items?: UpdateDeviceStateEventGroupData["body"]["items"];
+		body?: UpdateDeviceStateEventGroupData["body"];
+		rangeStart?: Date | string;
+		rangeEnd?: Date | string;
+		title?: string | null;
+		description?: string | null;
+		notes?: string | null;
+		metadata?: JsonValue;
+		tags?: string[] | null;
+	}>;
 }
 
 export interface DeviceSummary {
@@ -403,6 +535,93 @@ export async function updateDeviceStateEventGroup(data: UpdateDeviceStateEventGr
 					}
 					: undefined,
 			},
+			{
+				headers: {
+					"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
+				},
+			},
+		);
+
+		return response.data?.data;
+	} catch (error) {
+		throw error;
+	}
+}
+
+/**
+ * Updates multiple Device State Event Groups across devices in a single API call.
+ *
+ * @param data - The data required to update groups and items
+ * @returns The update results with per-index status
+ */
+export async function updateDeviceStateEventGroupsManyByCluster(data: UpdateDeviceStateEventGroupsManyByClusterData) {
+	try {
+		if (!data.clusterId) {
+			throw new Error("Invalid Input, clusterId is required.");
+		}
+		if (!data.account) {
+			throw new Error("Invalid Input, account is required.");
+		}
+		if (!data.groups || data.groups.length === 0) {
+			throw new Error("Invalid Input, groups array is required and cannot be empty.");
+		}
+
+		const groupsPayload = data.groups.map((group, index) => {
+			if (!group.deviceId) {
+				throw new Error(`Invalid Input, deviceId is required at index ${index}.`);
+			}
+			if (!group.groupId) {
+				throw new Error(`Invalid Input, groupId is required at index ${index}.`);
+			}
+
+			if (group.body && typeof group.body === "object") {
+				const items = group.body.items;
+				return {
+					deviceId: group.deviceId,
+					groupId: group.groupId,
+					body: {
+						group: group.body.group,
+						items: items
+							? {
+								create: Array.isArray(items.create) ? items.create.map(normalizeCreateItemPayload) : undefined,
+								update: Array.isArray(items.update) ? items.update.map(normalizeUpdateItemPayload) : undefined,
+								delete: Array.isArray(items.delete) ? items.delete : undefined,
+							}
+							: undefined,
+					},
+				};
+			}
+
+			const groupPatch = group.group ?? pickDefined({
+				rangeStart: group.rangeStart,
+				rangeEnd: group.rangeEnd,
+				title: group.title,
+				description: group.description,
+				notes: group.notes,
+				metadata: group.metadata,
+				tags: group.tags,
+			});
+
+			return {
+				deviceId: group.deviceId,
+				groupId: group.groupId,
+				group: Object.keys(groupPatch || {}).length ? groupPatch : undefined,
+				items: group.items
+					? {
+						create: Array.isArray(group.items.create) ? group.items.create.map(normalizeCreateItemPayload) : undefined,
+						update: Array.isArray(group.items.update) ? group.items.update.map(normalizeUpdateItemPayload) : undefined,
+						delete: Array.isArray(group.items.delete) ? group.items.delete : undefined,
+					}
+					: undefined,
+			};
+		});
+
+		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
+		const url = `${data.clusterId}/device/${applicationId}/groups/update/many`;
+
+		const response = await lightHouseAPIHandler.patch(
+			url,
+			{ groups: groupsPayload },
 			{
 				headers: {
 					"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
