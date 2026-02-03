@@ -267,6 +267,13 @@ export default function EventsPage() {
 					</>
 				)}
 			</main>
+			<Link
+				href="/data/bulk-edit"
+				className="fixed bottom-6 right-6 z-50 flex items-center justify-center w-14 h-14 bg-primary text-white rounded-full shadow-lg hover:bg-primary/90 hover:scale-105 active:scale-95 transition-all duration-200 group"
+				title="Bulk Edit Events"
+			>
+				<span className="material-symbols-outlined text-2xl group-hover:rotate-12 transition-transform">library_add_check</span>
+			</Link>
 		</div>
 	);
 }

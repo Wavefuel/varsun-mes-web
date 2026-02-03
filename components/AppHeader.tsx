@@ -20,9 +20,17 @@ type AppHeaderProps = {
 	showDateNavigator?: boolean;
 	dateNavigatorDisabled?: boolean;
 	rightElement?: React.ReactNode;
+	leftElement?: React.ReactNode;
 };
 
-export default function AppHeader({ title, subtitle, showDateNavigator = false, dateNavigatorDisabled = false, rightElement }: AppHeaderProps) {
+export default function AppHeader({
+	title,
+	subtitle,
+	showDateNavigator = false,
+	dateNavigatorDisabled = false,
+	rightElement,
+	leftElement,
+}: AppHeaderProps) {
 	const router = useRouter();
 	const { currentDate, setCurrentDate } = useData();
 
@@ -40,15 +48,21 @@ export default function AppHeader({ title, subtitle, showDateNavigator = false, 
 				)}
 			>
 				<div className="flex items-center justify-between">
-					<div className="flex flex-col">
-						<h1 className="header-title">{title}</h1>
-						{subtitle && <div className="mt-0.5 header-subtitle uppercase flex items-center gap-1">{subtitle}</div>}
+					<div className="flex items-center gap-3">
+						{leftElement}
+						<div className="flex flex-col">
+							<h1 className="header-title">{title}</h1>
+							{subtitle && <div className="mt-0.5 header-subtitle uppercase flex items-center gap-1">{subtitle}</div>}
+						</div>
 					</div>
 					<div className="flex items-center gap-3">
 						{rightElement ? (
 							rightElement
 						) : (
-							<button onClick={handleLogout} className="p-0.5 rounded-md active:scale-75 transition-transform hover:bg-gray-50 flex items-center justify-center">
+							<button
+								onClick={handleLogout}
+								className="p-0.5 rounded-md active:scale-75 transition-transform hover:bg-gray-50 flex items-center justify-center"
+							>
 								<span className="material-symbols-outlined !text-[19px] text-primary">logout</span>
 							</button>
 						)}
