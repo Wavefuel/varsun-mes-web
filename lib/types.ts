@@ -30,6 +30,10 @@ export interface Order {
 	lhtDeviceId?: string;
 	lhtGroupId?: string;
 	lhtItemId?: string;
+
+	// Sync Metadata
+	importedFrom?: string;
+	uniqueIdentifier?: string;
 }
 
 export const MOCK_INITIAL_ORDERS: Order[] = [

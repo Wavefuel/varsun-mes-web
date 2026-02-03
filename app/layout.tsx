@@ -1,4 +1,11 @@
 import type { Metadata, Viewport } from "next";
+import BottomNav from "@/components/BottomNav";
+import FontDebugger from "@/components/FontDebugger";
+import AppSplash from "@/components/AppSplash";
+import { DataProvider } from "@/context/DataContext";
+import AuthGuard from "@/components/AuthGuard";
+import ErpHeartbeat from "@/components/ErpHeartbeat";
+import { Toaster } from "sonner";
 import "./globals.css";
 
 export const metadata: Metadata = {
@@ -31,15 +38,6 @@ export const viewport: Viewport = {
 	themeColor: "#ffffff",
 };
 
-import BottomNav from "@/components/BottomNav";
-import FontDebugger from "@/components/FontDebugger";
-import AppSplash from "@/components/AppSplash"; // Handles initial load to prevent icon FOUC
-
-import { DataProvider } from "@/context/DataContext";
-import AuthGuard from "@/components/AuthGuard";
-
-import { Toaster } from "sonner";
-
 export default function RootLayout({
 	children,
 }: Readonly<{
@@ -69,6 +67,7 @@ export default function RootLayout({
 				<DataProvider>
 					<div className="mobile-wrapper relative bg-[#F8FAFB] min-h-screen shadow-2xl overflow-hidden max-w-[480px] w-full mx-auto">
 						<AuthGuard />
+						{/* <ErpHeartbeat /> */}
 						<AppSplash />
 						<div className="pb-20">{children}</div>
 						<BottomNav />

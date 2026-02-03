@@ -2,6 +2,7 @@
 
 import React, { useEffect, useMemo, useState } from "react";
 import Link from "next/link";
+import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { clsx, type ClassValue } from "clsx";
 import { twMerge } from "tailwind-merge";
@@ -14,6 +15,9 @@ import Select from "@/components/ui/Select";
 import { useData } from "@/context/DataContext";
 import type { Order, Assignment } from "@/lib/types";
 import {
+	createDeviceStateEventGroup,
+	createDeviceStateEventGroupItems,
+	updateDeviceStateEventGroupItems,
 	deleteDeviceStateEventGroupItems,
 	deleteDeviceStateEventGroupItemsManyByCluster,
 	fetchDeviceList,
@@ -21,6 +25,8 @@ import {
 	type DeviceSummary,
 } from "@/utils/scripts";
 import { formatTimeToIST } from "@/utils/dateUtils";
+import { fetchErpSchedule } from "@/app/actions/erp";
+import { STORAGE_KEY } from "@/components/AuthGuard";
 
 function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
@@ -42,7 +48,9 @@ type ApiEventGroup = {
 	title?: string | null;
 	Items?: ApiEventItem[] | null;
 };
+
 export default function PlanningPage() {
+	const router = useRouter();
 	const {
 		orders,
 		currentDate,
@@ -69,6 +77,8 @@ export default function PlanningPage() {
 
 	// Local loading state just for the initial fetch trigger visual
 	const [isLoading, setIsLoading] = useState(false);
+	const [isSyncing, setIsSyncing] = useState(false);
+
 	const [isError, setIsError] = useState(false);
 	const deviceFetchRef = React.useRef(false);
 
@@ -109,6 +119,16 @@ export default function PlanningPage() {
 
 	const selectionKey = (item: Assignment) => (item.lhtItemId ? `${item.id}:${item.lhtItemId}` : item.id);
 
+	// Sync Button Handler
+	const handleSync = () => {
+		router.push("/planning/sync");
+	};
+
+	const handleLogout = () => {
+		localStorage.removeItem(STORAGE_KEY);
+		router.replace("/login");
+	};
+
 	useEffect(() => {
 		if (!lighthouseEnabled) return;
 		if (!lhtClusterId) return;
@@ -148,10 +168,6 @@ export default function PlanningPage() {
 		if (globalDataDate === `${currentDate}:${currentShift}` && globalAssignments) {
 			return;
 		}
-
-		// Allow UI to show previous data while loading? No, user wants correct data.
-		// If we switched date, we should probably show loader.
-		// But if we switch tabs, globalDataDate matches.
 
 		setIsLoading(true);
 
@@ -243,6 +259,8 @@ export default function PlanningPage() {
 								lhtDeviceId: deviceId || undefined,
 								lhtGroupId: groupId,
 								lhtItemId: itemId,
+								importedFrom: String(metadata.importedFrom ?? ""),
+								uniqueIdentifier: String(metadata.uniqueIdentifier ?? ""),
 							},
 						];
 					});
@@ -384,7 +402,39 @@ export default function PlanningPage() {
 
 	return (
 		<div className="flex flex-col min-h-screen bg-background-dashboard pb-24">
-			<AppHeader title="Planning" subtitle="Shift Scheduling" showDateNavigator={true} dateNavigatorDisabled={isDeleteMode} />
+			<AppHeader
+				title="Planning"
+				subtitle="Shift Scheduling"
+				showDateNavigator={true}
+				dateNavigatorDisabled={isDeleteMode}
+				rightElement={
+					<div className="flex items-center gap-2">
+						<button
+							onClick={handleSync}
+							disabled={isLoading}
+							className={cn(
+								"flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-xs font-bold transition-all",
+								isSyncing
+									? "bg-gray-100 text-gray-400 cursor-not-allowed"
+									: "bg-primary/10 text-primary hover:bg-primary/20 hover:scale-105 active:scale-95",
+							)}
+							title="Sync with ERP"
+						>
+							<span className={cn("material-symbols-outlined text-[18px]", isSyncing && "animate-spin")}>
+								{isSyncing ? "sync" : "cloud_sync"}
+							</span>
+							<span className="hidden sm:inline">{isSyncing ? "Syncing..." : "Sync"}</span>
+						</button>
+						<div className="h-4 w-px bg-gray-300 mx-1" />
+						<button
+							onClick={handleLogout}
+							className="p-0.5 rounded-md active:scale-75 transition-transform hover:bg-gray-50 flex items-center justify-center"
+						>
+							<span className="material-symbols-outlined !text-[19px] text-primary">logout</span>
+						</button>
+					</div>
+				}
+			/>
 
 			<div className="sticky top-(--header-height-expanded) z-20 bg-background-dashboard pb-2 px-4">
 				<SearchFilterBar
@@ -457,9 +507,9 @@ export default function PlanningPage() {
 						/>
 					</div>
 				) : isLoading ||
-					(lighthouseEnabled && globalAssignments === null) ||
-					globalDataDate !== `${currentDate}:${currentShift}` ||
-					(lighthouseEnabled && !globalDevices.length) ? (
+				  (lighthouseEnabled && globalAssignments === null) ||
+				  globalDataDate !== `${currentDate}:${currentShift}` ||
+				  (lighthouseEnabled && !globalDevices.length) ? (
 					<div className="flex-1 flex flex-col justify-center">
 						<Loader />
 					</div>
