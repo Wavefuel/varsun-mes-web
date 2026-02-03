@@ -1094,6 +1094,30 @@ export interface FetchDeviceStatusPeriodsResponse {
 	};
 }
 
+export interface FetchDeviceStatusPeriodsManyByClusterData {
+	clusterId: string;
+	applicationId?: string;
+	deviceIds?: string[];
+	where?: Record<string, unknown>;
+	query?: {
+		deviceStatus?: string;
+		fromDate?: Date | string;
+		toDate?: Date | string;
+		minDurationMinutes?: number;
+	};
+}
+
+export interface FetchDeviceStatusPeriodsManyByClusterResponseItem {
+	status: "fulfilled" | "rejected";
+	value?: { deviceId: string; data: FetchDeviceStatusPeriodsResponse };
+	reason?: string;
+	index: number;
+}
+
+export interface FetchDeviceStatusPeriodsManyByClusterResponse {
+	data: FetchDeviceStatusPeriodsManyByClusterResponseItem[];
+}
+
 /**
  * Fetches device status periods that meet a minimum duration threshold.
  * Returns all device states or a specific state if deviceStatus is provided.
@@ -1141,6 +1165,46 @@ export async function fetchDeviceStatusPeriods(data: FetchDeviceStatusPeriodsDat
 				...(data.query?.minDurationMinutes && { minDurationMinutes: data.query.minDurationMinutes }),
 			},
 		});
+
+		return response.data;
+	} catch (error) {
+		throw error;
+	}
+}
+
+/**
+ * Fetches status periods across multiple devices in a cluster.
+ *
+ * @param data - The data required to fetch status periods across devices
+ * @returns Per-device status periods with duration information
+ */
+export async function fetchDeviceStatusPeriodsManyByCluster(
+	data: FetchDeviceStatusPeriodsManyByClusterData,
+): Promise<FetchDeviceStatusPeriodsManyByClusterResponse> {
+	try {
+		if (!data.clusterId) {
+			throw new Error("Invalid Input, clusterId is required.");
+		}
+
+		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
+		const url = `${data.clusterId}/device/${applicationId}/status-periods/many`;
+
+		const response = await lightHouseAPIHandler.post(
+			url,
+			{
+				deviceIds: data.deviceIds,
+				where: data.where,
+				deviceStatus: data.query?.deviceStatus,
+				fromDate: data.query?.fromDate,
+				toDate: data.query?.toDate,
+				minDurationMinutes: data.query?.minDurationMinutes,
+			},
+			{
+				headers: {
+					"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
+				},
+			},
+		);
 
 		return response.data;
 	} catch (error) {
