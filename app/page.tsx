@@ -14,6 +14,7 @@ import { MetricValue, MetricLabel, SectionTitle } from "@/components/ui/Typograp
 import { fetchDeviceCount, fetchDeviceList, readDeviceStateEventGroupsWithItemsByCluster, type DeviceSummary } from "@/utils/scripts";
 import { formatTimeToIST, getISTDate } from "@/utils/dateUtils";
 import { Assignment } from "@/lib/types";
+import { buildUtcRangeFromIstDate, getShiftDisplayName } from "@/utils/shiftUtils";
 
 type ApiEventItem = {
 	id?: string;
@@ -94,25 +95,10 @@ export default function Home() {
 
 		setIsLoading(true);
 
-		const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-		const [year, month, day] = currentDate.split("-").map(Number);
-
-		let startRange: string;
-		let endRange: string;
-
-		if (currentShift === "Day") {
-			// Day Shift: 8 AM to 8 PM IST
-			const start = Date.UTC(year, month - 1, day, 8, 0, 0, 0);
-			const end = Date.UTC(year, month - 1, day, 20, 0, 0, 0);
-			startRange = new Date(start - IST_OFFSET_MS).toISOString();
-			endRange = new Date(end - IST_OFFSET_MS).toISOString();
-		} else {
-			// Night Shift: 8 PM to 8 AM next day IST
-			const start = Date.UTC(year, month - 1, day, 20, 0, 0, 0);
-			const end = Date.UTC(year, month - 1, day + 1, 8, 0, 0, 0);
-			startRange = new Date(start - IST_OFFSET_MS).toISOString();
-			endRange = new Date(end - IST_OFFSET_MS).toISOString();
-		}
+		// Calculate shift-based range using utility
+		const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate, currentShift);
+		const startRange = fromDateUTC.toISOString();
+		const endRange = toDateUTC.toISOString();
 
 		const toLocalYYYYMMDD = (iso: string) => {
 			const d = getISTDate(iso);
@@ -135,7 +121,7 @@ export default function Home() {
 				if (cancelled) return;
 				const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
 				const mapped: any[] = groups.flatMap((group) => {
-					const groupShift = currentShift === "Day" ? "Day Shift (S1)" : "Night Shift (S2)";
+					const groupShift = getShiftDisplayName(currentShift);
 
 					const deviceId = typeof group?.deviceId === "string" ? group.deviceId : "";
 					const machineName = (() => {

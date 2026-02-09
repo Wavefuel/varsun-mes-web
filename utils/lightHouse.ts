@@ -13,7 +13,7 @@ export const lightHouseAPIHandler: AxiosInstance = axios.create({
 		"x-application-code": "PSM",
 		"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
 	},
-	timeout: 30000, // 30 seconds
+	timeout: 300000, // 5 minutes
 	httpsAgent: new https.Agent({
 		rejectUnauthorized: false,
 		keepAlive: true,
@@ -34,7 +34,7 @@ lightHouseAPIHandler.interceptors.request.use(
 	},
 	(error) => {
 		return Promise.reject(error);
-	}
+	},
 );
 
 // Add response interceptor
@@ -43,7 +43,7 @@ lightHouseAPIHandler.interceptors.response.use(
 		// You can modify the response here if needed
 		return response;
 	},
-	(error: AxiosError) => {	
+	(error: AxiosError) => {
 		// console.error("Full Axios Error:", error);
 		// Log or process errors
 		let modError = {
@@ -52,5 +52,5 @@ lightHouseAPIHandler.interceptors.response.use(
 		};
 		// You can modify the error or perform additional actions here
 		return Promise.reject(modError);
-	}
+	},
 );

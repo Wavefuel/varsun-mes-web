@@ -49,7 +49,7 @@ export function AssignmentInput({ className = "", disabled, hasError = false, ..
 }
 
 interface WrapperProps {
-	label: string;
+	label: React.ReactNode;
 	children: React.ReactNode;
 	className?: string;
 }

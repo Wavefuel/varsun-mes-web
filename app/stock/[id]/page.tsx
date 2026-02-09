@@ -21,6 +21,7 @@ import { combineISTDateAndTime, formatTimeToIST24 } from "@/utils/dateUtils";
 import { cn } from "@/lib/utils";
 import CustomDatePicker from "@/components/CustomDatePicker";
 import { format, parse } from "date-fns";
+import { getShiftFromDisplayName, buildUtcRangeFromIstDate as buildUtcRangeUtil, SHIFT_CONFIG } from "@/utils/shiftUtils";
 
 type ApiEventItem = {
 	id?: string;
@@ -142,25 +143,13 @@ function StockEntryForm() {
 	const deviceLabel = (device?: DeviceSummary) => device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
 
 	const toIsoShiftRange = (dateStr: string, shift: string) => {
-		const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-		const [year, month, day] = dateStr.split("-").map(Number);
-		if (!year || !month || !day) return null;
-
-		if (shift.includes("Night") || shift === "Night") {
-			const start = Date.UTC(year, month - 1, day, 20, 0, 0, 0);
-			const end = Date.UTC(year, month - 1, day + 1, 8, 0, 0, 0);
-			return {
-				rangeStart: new Date(start - IST_OFFSET_MS).toISOString(),
-				rangeEnd: new Date(end - IST_OFFSET_MS).toISOString(),
-			};
-		} else {
-			const start = Date.UTC(year, month - 1, day, 8, 0, 0, 0);
-			const end = Date.UTC(year, month - 1, day, 20, 0, 0, 0);
-			return {
-				rangeStart: new Date(start - IST_OFFSET_MS).toISOString(),
-				rangeEnd: new Date(end - IST_OFFSET_MS).toISOString(),
-			};
-		}
+		// Use centralized utility
+		const shiftType = getShiftFromDisplayName(shift) || "Day";
+		const { fromDateUTC, toDateUTC } = buildUtcRangeUtil(dateStr, shiftType);
+		return {
+			rangeStart: fromDateUTC.toISOString(),
+			rangeEnd: toDateUTC.toISOString(),
+		};
 	};
 
 	const toTimeHHMM = (value?: string | null) => {
@@ -320,7 +309,11 @@ function StockEntryForm() {
 					machine: deviceLabel(foundDevice) || deviceId || "Unknown Device",
 					operator: String(metadata.operatorCode ?? ""),
 					date: selectedDate,
-					shift: shiftToUse.includes("Night") ? "Night Shift (S2)" : "Day Shift (S1)",
+					shift: (() => {
+						if (shiftToUse.includes("Night") || shiftToUse === "Night") return "Night Shift (S2)";
+						if (shiftToUse.includes("General") || shiftToUse === "General") return "General Shift (S3)";
+						return "Day Shift (S1)";
+					})(),
 					startTime: toTimeHHMM(item?.segmentStart ?? null) || "",
 					endTime: toTimeHHMM(item?.segmentEnd ?? null) || "",
 					code: String(metadata.operatorCode ?? ""),
@@ -901,7 +894,7 @@ function StockEntryForm() {
 									title="Planned Details"
 									icon="assignment"
 									data={formData}
-									onChange={() => { }}
+									onChange={() => {}}
 									readOnly={true}
 									hideHeader={true}
 									devices={devices}

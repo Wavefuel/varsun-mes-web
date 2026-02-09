@@ -15,8 +15,8 @@ function cn(...inputs: ClassValue[]) {
 interface CustomDatePickerProps {
 	value: string; // YYYY-MM-DD or HH:mm
 	onChange: (date: string) => void;
-	currentShift?: "Day" | "Night";
-	onShiftChange?: (shift: "Day" | "Night") => void;
+	currentShift?: "Day" | "Night" | "General";
+	onShiftChange?: (shift: "Day" | "Night" | "General") => void;
 	className?: string; // Class for the wrapper
 	wrapperClassName?: string;
 	customInput?: React.ReactNode;
@@ -317,6 +317,16 @@ export default function CustomDatePicker({
 								)}
 							>
 								Day
+							</button>
+							<button
+								type="button"
+								onClick={() => onShiftChange("General")}
+								className={cn(
+									"flex-1 py-1.5 rounded-md text-[9px] font-bold uppercase tracking-widest transition-all",
+									currentShift === "General" ? "bg-primary text-white shadow-sm" : "text-gray-400 hover:text-primary",
+								)}
+							>
+								General
 							</button>
 							<button
 								type="button"

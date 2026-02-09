@@ -13,8 +13,8 @@ function cn(...inputs: ClassValue[]) {
 interface DateNavigatorProps {
 	currentDate?: string;
 	setCurrentDate?: (date: string) => void;
-	currentShift?: "Day" | "Night";
-	setCurrentShift?: (shift: "Day" | "Night") => void;
+	currentShift?: "Day" | "Night" | "General";
+	setCurrentShift?: (shift: "Day" | "Night" | "General") => void;
 	disabled?: boolean;
 	className?: string;
 }
@@ -51,7 +51,7 @@ export default function DateNavigator({
 		setLocalShift(derivedShift);
 	}, [derivedShift]);
 
-	const debouncedUpdate = (newDate: string, newShift: "Day" | "Night") => {
+	const debouncedUpdate = (newDate: string, newShift: "Day" | "Night" | "General") => {
 		if (timeoutRef.current) {
 			clearTimeout(timeoutRef.current);
 		}
@@ -61,7 +61,7 @@ export default function DateNavigator({
 		}, 600);
 	};
 
-	const updateState = (newDate: string, newShift: "Day" | "Night") => {
+	const updateState = (newDate: string, newShift: "Day" | "Night" | "General") => {
 		setLocalDate(newDate);
 		setLocalShift(newShift);
 		debouncedUpdate(newDate, newShift);
@@ -82,13 +82,18 @@ export default function DateNavigator({
 		let newDate = localDate;
 		let newShift = localShift;
 
-		if (localShift === "Night") {
-			newShift = "Day";
-		} else {
+		if (localShift === "Day") {
+			// Day -> Previous Night (previous day)
 			const d = new Date(localDate);
 			d.setDate(d.getDate() - 1);
 			newDate = d.toISOString().split("T")[0];
 			newShift = "Night";
+		} else if (localShift === "General") {
+			// General -> Day (same day)
+			newShift = "Day";
+		} else {
+			// Night -> General (same day)
+			newShift = "General";
 		}
 		updateState(newDate, newShift);
 	};
@@ -98,8 +103,13 @@ export default function DateNavigator({
 		let newShift = localShift;
 
 		if (localShift === "Day") {
+			// Day -> General (same day)
+			newShift = "General";
+		} else if (localShift === "General") {
+			// General -> Night (same day)
 			newShift = "Night";
 		} else {
+			// Night -> Day (next day)
 			const d = new Date(localDate);
 			d.setDate(d.getDate() + 1);
 			newDate = d.toISOString().split("T")[0];
@@ -125,7 +135,8 @@ export default function DateNavigator({
 						>
 							<span className="material-symbols-outlined !text-sm text-primary">calendar_today</span>
 							<span className="text-xs font-bold text-primary uppercase tracking-wider">
-								{getDisplayDate(localDate)} - {localShift === "Day" ? "DAY SHIFT" : "NIGHT SHIFT"}
+								{getDisplayDate(localDate)} -{" "}
+								{localShift === "Day" ? "DAY SHIFT" : localShift === "General" ? "GENERAL SHIFT" : "NIGHT SHIFT"}
 							</span>
 						</button>
 					}

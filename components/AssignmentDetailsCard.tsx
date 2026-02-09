@@ -189,7 +189,7 @@ export default function AssignmentDetailsCard({
 					<div className="space-y-1.5">
 						<Select
 							label="Shift Work"
-							options={["Day Shift (S1)", "Night Shift (S2)", "Custom"]}
+							options={["Day Shift (S1)", "General Shift (S3)", "Night Shift (S2)", "Custom"]}
 							value={data.shift}
 							onChange={(val) => handleChange("shift", val)}
 							disabled={readOnly}

@@ -19,6 +19,7 @@ import {
 	type DeviceSummary,
 	type UpdateDeviceStateEventGroupData,
 } from "@/utils/scripts";
+import { getShiftDisplayName, buildUtcRangeFromIstDate, SHIFT_CONFIG } from "@/utils/shiftUtils";
 
 function AssignmentForm() {
 	const router = useRouter();
@@ -59,7 +60,7 @@ function AssignmentForm() {
 	const [machine, setMachine] = useState("CNC-042 (Alpha)");
 	const [operator, setOperator] = useState("");
 	const [date, setDate] = useState(() => queryDate || currentDate);
-	const [shift, setShift] = useState(() => (currentShift === "Day" ? "Day Shift (S1)" : "Night Shift (S2)"));
+	const [shift, setShift] = useState(() => getShiftDisplayName(currentShift));
 	const [startTime, setStartTime] = useState("08:00");
 	const [endTime, setEndTime] = useState("20:00");
 	const [code, setCode] = useState("");
@@ -129,10 +130,13 @@ function AssignmentForm() {
 	};
 
 	const isNightShift = (value: string) => /night/i.test(value) || /S2/i.test(value);
+	const isGeneralShift = (value: string) => /general/i.test(value) || /S3/i.test(value);
 
 	const getShiftWindow = (value: string) => {
 		if (/custom/i.test(value)) return { start: startTime, end: endTime };
-		return isNightShift(value) ? { start: "20:00", end: "08:00" } : { start: "08:00", end: "20:00" };
+		if (isNightShift(value)) return { start: "20:00", end: "08:00" };
+		if (isGeneralShift(value)) return { start: "08:30", end: "17:30" };
+		return { start: "08:00", end: "20:00" };
 	};
 
 	const toIsoDayRange = (dateStr: string) => {
@@ -174,10 +178,7 @@ function AssignmentForm() {
 		if (!globalAssignments || globalDataDate !== `${date}:${currentShift}`) return undefined;
 		const match = globalAssignments.find(
 			(item) =>
-				item.lhtDeviceId === selectedDeviceId &&
-				(currentShift === "Day" ? item.shift === "Day Shift (S1)" : item.shift === "Night Shift (S2)") &&
-				item.date === date &&
-				item.lhtGroupId,
+				item.lhtDeviceId === selectedDeviceId && item.shift === getShiftDisplayName(currentShift) && item.date === date && item.lhtGroupId,
 		);
 		if (!match?.lhtGroupId) return undefined;
 		return match.lhtGroupId;
@@ -221,18 +222,10 @@ function AssignmentForm() {
 
 				// 2. Fetch Assignments if missing (needed for Planned Queue)
 				if (globalDataDate !== `${selectedDate}:${currentShift}` || !globalAssignments) {
-					// Calculate shift-based range
-					const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-					const [yPart, mPart, dPart] = selectedDate.split("-").map(Number);
-					let startRange, endRange;
-
-					if (currentShift === "Day") {
-						startRange = new Date(Date.UTC(yPart, mPart - 1, dPart, 8, 0, 0, 0) - IST_OFFSET_MS).toISOString();
-						endRange = new Date(Date.UTC(yPart, mPart - 1, dPart, 20, 0, 0, 0) - IST_OFFSET_MS).toISOString();
-					} else {
-						startRange = new Date(Date.UTC(yPart, mPart - 1, dPart, 20, 0, 0, 0) - IST_OFFSET_MS).toISOString();
-						endRange = new Date(Date.UTC(yPart, mPart - 1, dPart + 1, 8, 0, 0, 0) - IST_OFFSET_MS).toISOString();
-					}
+					// Calculate shift-based range using utility
+					const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(selectedDate, currentShift);
+					const startRange = fromDateUTC.toISOString();
+					const endRange = toDateUTC.toISOString();
 
 					const groupsUnknown = await readDeviceStateEventGroupsWithItemsByCluster({
 						clusterId: lhtClusterId,
@@ -245,7 +238,7 @@ function AssignmentForm() {
 					const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
 					console.log("loadData: Fetched groups", groups);
 					const mapped: Assignment[] = groups.flatMap((group) => {
-						const groupShift = currentShift === "Day" ? "Day Shift (S1)" : "Night Shift (S2)";
+						const groupShift = getShiftDisplayName(currentShift);
 
 						const deviceId = typeof group?.deviceId === "string" ? group.deviceId : "";
 						const machineName = (() => {
@@ -378,17 +371,10 @@ function AssignmentForm() {
 					return;
 				}
 
-				// API fallback
-				const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-				const [yFall, mFall, dFall] = selectedDate.split("-").map(Number);
-				let startRange, endRange;
-				if (currentShift === "Day") {
-					startRange = new Date(Date.UTC(yFall, mFall - 1, dFall, 8, 0, 0, 0) - IST_OFFSET_MS).toISOString();
-					endRange = new Date(Date.UTC(yFall, mFall - 1, dFall, 20, 0, 0, 0) - IST_OFFSET_MS).toISOString();
-				} else {
-					startRange = new Date(Date.UTC(yFall, mFall - 1, dFall, 20, 0, 0, 0) - IST_OFFSET_MS).toISOString();
-					endRange = new Date(Date.UTC(yFall, mFall - 1, dFall + 1, 8, 0, 0, 0) - IST_OFFSET_MS).toISOString();
-				}
+				// API fallback - use utility for shift range calculation
+				const { fromDateUTC: fromFallback, toDateUTC: toFallback } = buildUtcRangeFromIstDate(selectedDate, currentShift);
+				const startRange = fromFallback.toISOString();
+				const endRange = toFallback.toISOString();
 
 				const groupsUnknownFallback = await readDeviceStateEventGroupsWithItemsByCluster({
 					clusterId: lhtClusterId,
@@ -440,10 +426,11 @@ function AssignmentForm() {
 				setSelectedDeviceId(foundDeviceId);
 				setMachine(label);
 				setDate(selectedDate);
-				setShift(isNight ? "Night Shift (S2)" : "Day Shift (S1)");
+				const nightCheck = isNight ? "Night Shift (S2)" : isGeneralShift(shift) ? "General Shift (S3)" : "Day Shift (S1)";
+				setShift(nightCheck);
 				setStartTime(toTimeHHMM(item?.segmentStart ?? null) || "08:00");
 				setEndTime(toTimeHHMM(item?.segmentEnd ?? null) || "20:00");
-				setOperator(String(metaDataObj.operatorName ?? metaDataObj.operator ?? metaDataObj.name ?? metaDataObj.operatorCode ?? ""));
+				setOperator(String(metaDataObj.operatorName || metaDataObj.operator || metaDataObj.name || metaDataObj.operatorCode || ""));
 				setCode(oc || "");
 				setPartNumber(pn);
 				setWorkOrderId(workOrder);
@@ -558,19 +545,24 @@ function AssignmentForm() {
 
 		// If invalid, try auto-switching shift (unless Custom)
 		if (!result.valid && !/custom/i.test(shift)) {
-			const otherShift = isNightShift(shift) ? "Day Shift (S1)" : "Night Shift (S2)";
-			const otherResult = checkShiftValidity(otherShift);
+			const shifts = ["Day Shift (S1)", "General Shift (S3)", "Night Shift (S2)"];
+			const currentIndex = shifts.findIndex((s) => s === shift);
+			const otherShifts = shifts.filter((_, i) => i !== currentIndex);
 
-			if (otherResult.valid) {
-				result = otherResult;
-				finalShift = otherShift;
-				setShift(finalShift);
-				// Clear shift error if it was set
-				setErrors((prev) => {
-					const next = { ...prev };
-					delete next.shift;
-					return next;
-				});
+			for (const otherShift of otherShifts) {
+				const otherResult = checkShiftValidity(otherShift);
+				if (otherResult.valid) {
+					result = otherResult;
+					finalShift = otherShift;
+					setShift(finalShift);
+					// Clear shift error if it was set
+					setErrors((prev) => {
+						const next = { ...prev };
+						delete next.shift;
+						return next;
+					});
+					break;
+				}
 			}
 		}
 
@@ -1074,12 +1066,13 @@ function AssignmentForm() {
 															{displayId} • {order.partNumber}
 														</p>
 														<span
-															className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${order.status === "ACTIVE"
-																? "text-green-600 bg-green-50"
-																: order.status === "ACTUAL_OUTPUT"
-																	? "text-blue-600 bg-blue-50"
-																	: "text-gray-400 bg-gray-50"
-																}`}
+															className={`text-[9px] font-bold px-1.5 py-0.5 rounded ${
+																order.status === "ACTIVE"
+																	? "text-green-600 bg-green-50"
+																	: order.status === "ACTUAL_OUTPUT"
+																		? "text-blue-600 bg-blue-50"
+																		: "text-gray-400 bg-gray-50"
+															}`}
 														>
 															{order.status}
 														</span>

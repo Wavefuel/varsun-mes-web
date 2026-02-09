@@ -27,6 +27,7 @@ import {
 	DeviceStateEventItemInput,
 	DeviceStateEventItemUpdateInput,
 } from "@/utils/scripts";
+import { buildUtcRangeFromIstDate as buildUtcRangeUtil, SHIFT_CONFIG } from "@/utils/shiftUtils";
 
 interface DowntimeEvent {
 	id: string;
@@ -58,37 +59,9 @@ const formatDuration = (minutes: number) => {
 	return `${m}min`;
 };
 
-const buildUtcRangeFromIstDate = (dateStr: string, currentShift: string) => {
-	const [year, month, day] = dateStr.split("-").map(Number);
-	const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
-
-	let fromDateUTC: Date;
-	let toDateUTC: Date;
-
-	if (currentShift === "Day") {
-		// Day Shift: 8 AM to 8 PM IST
-		const start = Date.UTC(year, month - 1, day, 8, 0, 0, 0);
-		const end = Date.UTC(year, month - 1, day, 20, 0, 0, 0);
-		fromDateUTC = new Date(start - IST_OFFSET_MS);
-		toDateUTC = new Date(end - IST_OFFSET_MS);
-	} else {
-		// Night Shift: 8 PM to 8 AM next day IST
-		const start = Date.UTC(year, month - 1, day, 20, 0, 0, 0);
-		const end = Date.UTC(year, month - 1, day + 1, 8, 0, 0, 0);
-		fromDateUTC = new Date(start - IST_OFFSET_MS);
-		toDateUTC = new Date(end - IST_OFFSET_MS);
-	}
-
-	console.log("Date Conversion Debug:", {
-		currentDateString: dateStr,
-		parsedValues: { year, month, day },
-		fromDateUTC: fromDateUTC.toISOString(),
-		toDateUTC: toDateUTC.toISOString(),
-		expectedISTStart: `${dateStr} ${currentShift === "Day" ? "08:00" : "20:00"} IST`,
-		expectedISTEnd: `${dateStr} ${currentShift === "Day" ? "20:00" : "08:00 (next day)"} IST`,
-	});
-
-	return { fromDateUTC, toDateUTC };
+// Use centralized utility for consistency
+const buildUtcRangeFromIstDate = (dateStr: string, currentShift: "Day" | "Night" | "General") => {
+	return buildUtcRangeUtil(dateStr, currentShift);
 };
 
 const normalizeIso = (value?: string | Date | null) => {
@@ -184,15 +157,18 @@ export default function MachineTaggingPage() {
 		} else if (currentDate < todayStr) {
 			return false;
 		} else {
-			// Same day - check shift start times
+			// Same day - check shift start times using SHIFT_CONFIG
 			const currentHour = now.getHours();
-			if (currentShift.includes("Night")) {
-				// Night shift starts at 20:00 (8 PM)
-				return currentHour < 20;
-			} else {
-				// Day shift starts at 08:00 (8 AM)
-				return currentHour < 8;
-			}
+			const currentMinute = now.getMinutes();
+			const currentTimeInMinutes = currentHour * 60 + currentMinute;
+
+			// Get shift start time from config
+			const shiftType = currentShift.includes("Night") ? "Night" : currentShift.includes("General") ? "General" : "Day";
+			const shiftStartHour = SHIFT_CONFIG[shiftType].startHour;
+			const shiftStartMinute = SHIFT_CONFIG[shiftType].startMinute;
+			const shiftStartInMinutes = shiftStartHour * 60 + shiftStartMinute;
+
+			return currentTimeInMinutes < shiftStartInMinutes;
 		}
 	}, [currentDate, currentShift]);
 
@@ -210,7 +186,7 @@ export default function MachineTaggingPage() {
 			if (lastFetchParams.current === fetchKey) {
 				// console.log("Skipping duplicate fetch for:", fetchKey);
 				// Ensure loading is false if we skip
-				if (loading) setLoading(false);
+				// if (loading) setLoading(false);
 				return;
 			}
 			lastFetchParams.current = fetchKey;
@@ -737,7 +713,7 @@ function EventCard({
 					body: {
 						rangeStart: fromDateUTC.toISOString(),
 						rangeEnd: toDateUTC.toISOString(),
-						title: `Event-${fromDateUTC.toISOString().split("T")[0]}-${toDateUTC.toISOString().split("T")[0]}`,
+						title: `EVENT-${fromDateUTC.toISOString().split("T")[0]}-${toDateUTC.toISOString().split("T")[0]}`,
 						metadata: { annotationType: "event" },
 						items: [itemPayload],
 					},

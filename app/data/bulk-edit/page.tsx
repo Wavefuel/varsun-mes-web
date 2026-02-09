@@ -7,11 +7,8 @@ import { twMerge } from "tailwind-merge";
 import { useData } from "@/context/DataContext";
 import {
 	fetchDeviceList,
-	readDeviceStateEventGroupsWithItems,
-	updateDeviceStateEventGroupItems,
-	fetchDeviceStatusPeriods,
-	createDeviceStateEventGroup,
-	createDeviceStateEventGroupItems,
+	batchReadDeviceStateEvents,
+	syncDeviceStateEventGroups,
 	type DeviceStateEventItemUpdateInput,
 	type DeviceStateEventItemInput,
 	type DeviceStatusPeriod,
@@ -180,125 +177,262 @@ export default function BulkEditPage() {
 			toast.error("Please select at least one device");
 			return;
 		}
+		if (selectedStatuses.length === 0) {
+			toast.error("Please select at least one status");
+			return;
+		}
 
 		setIsFetching(true);
 		setFetchedEvents([]);
 		setSelectedEventIds(new Set());
 
 		try {
-			const startUTC = buildUtcFromLocalinfo(startDate, startTime);
-			const endUTC = buildUtcFromLocalinfo(endDate, endTime);
+			// Ensure times are in HH:mm:ss format
+			const formatTime = (time: string) => {
+				if (!time) return "00:00:00";
+				// If already has seconds, return as is
+				if (time.includes(":") && time.split(":").length === 3) return time;
+				// Otherwise append :00
+				return `${time}:00`;
+			};
 
-			const promises = selectedDeviceIds.map(async (deviceId) => {
-				const deviceName = eventsDevices.find((d) => d.id === deviceId)?.deviceName || deviceId;
-				try {
-					// 1. Fetch raw status periods
-					const periodsResult = await fetchDeviceStatusPeriods({
-						deviceId,
-						clusterId: lhtClusterId,
-						query: {
-							fromDate: startUTC.toISOString(),
-							toDate: endUTC.toISOString(),
-							minDurationMinutes: 1, // Get everything? Or maybe 0?
-						},
-					});
-					const periods = periodsResult.data || [];
+			// Helper: Find nearest shift end time after the given end time
+			// Shift boundaries: 08:00 AM (02:30 UTC) and 08:00 PM (14:30 UTC) IST
+			const findNearestShiftEnd = (dateStr: string, timeStr: string): { date: string; time: string } => {
+				// Parse the user's end date/time in IST context
+				const userEndDateTime = buildUtcFromLocalinfo(dateStr, timeStr);
+				const userEndMs = userEndDateTime.getTime();
 
-					// 2. Fetch existing items (for metadata overlap)
-					const account = {};
-					const groups = await readDeviceStateEventGroupsWithItems({
-						deviceId,
-						clusterId: lhtClusterId,
-						account,
-						query: {
-							rangeStart: startUTC.toISOString(),
-							rangeEnd: endUTC.toISOString(),
-						},
-					});
+				// Shift boundaries in UTC: 02:30 and 14:30
+				const shiftBoundaries = [
+					{ hour: 2, minute: 30 }, // 08:00 AM IST
+					{ hour: 14, minute: 30 }, // 08:00 PM IST
+				];
 
-					// Flatten group items
-					const groupItems: any[] = [];
-					if (Array.isArray(groups)) {
-						for (const group of groups as any[]) {
-							const items = Array.isArray(group?.Items) ? group.Items : [];
-							items.forEach((item: any) => {
-								groupItems.push({
-									...item,
-									groupId: group.id,
-									annotationType: group?.metadata?.annotationType,
-								});
-							});
+				// Start checking from the user's end date
+				let checkDate = new Date(userEndDateTime);
+
+				// Look ahead up to 2 days to find the next shift boundary
+				for (let dayOffset = 0; dayOffset < 2; dayOffset++) {
+					for (const boundary of shiftBoundaries) {
+						const candidate = new Date(checkDate);
+						candidate.setUTCHours(boundary.hour, boundary.minute, 0, 0);
+
+						if (candidate.getTime() >= userEndMs) {
+							// Found the nearest shift end after user's end time
+							// Convert UTC to IST (UTC + 5:30)
+							const istDate = new Date(candidate.getTime() + 5.5 * 60 * 60 * 1000);
+							const istHours = istDate.getUTCHours();
+							const istMinutes = istDate.getUTCMinutes();
+
+							const extendedTime = `${String(istHours).padStart(2, "0")}:${String(istMinutes).padStart(2, "0")}:00`;
+							const extendedDateStr = istDate.toISOString().split("T")[0];
+
+							return { date: extendedDateStr, time: extendedTime };
 						}
 					}
+					// Move to next day
+					checkDate.setUTCDate(checkDate.getUTCDate() + 1);
+				}
 
-					// 3. Merge logic
-					const items: DowntimeEvent[] = [];
+				// Fallback: return original if no boundary found (shouldn't happen)
+				return { date: dateStr, time: formatTime(timeStr) };
+			};
 
-					for (const period of periods) {
-						// Filter by status if selected
-						if (selectedStatuses.length > 0 && !selectedStatuses.includes(period.status)) {
-							continue;
+			// Get extended end time for server fetch (to nearest shift boundary)
+			const extendedEnd = findNearestShiftEnd(endDate, endTime);
+
+			console.log("Fetching events with params:", {
+				startDate,
+				endDate: extendedEnd.date,
+				startTime: formatTime(startTime),
+				endTime: extendedEnd.time,
+				selectedStatuses,
+				note: `Extended from user's ${endDate} ${endTime} to shift boundary ${extendedEnd.date} ${extendedEnd.time}`,
+			});
+
+			// Use batch read API - single call for all devices!
+			const result = await batchReadDeviceStateEvents({
+				clusterId: lhtClusterId,
+				body: {
+					deviceIds: selectedDeviceIds,
+					startDate,
+					endDate: extendedEnd.date,
+					startTime: formatTime(startTime),
+					endTime: extendedEnd.time,
+					statuses: selectedStatuses.length > 0 ? selectedStatuses : undefined,
+					minDurationMinutes: 15,
+				},
+			});
+
+			// Process the batch response
+			const allEvents: DowntimeEvent[] = [];
+
+			for (const deviceId of selectedDeviceIds) {
+				const deviceData = result.data?.[deviceId];
+				if (!deviceData) continue;
+
+				const deviceName = deviceData.deviceName || eventsDevices.find((d) => d.id === deviceId)?.deviceName || deviceId;
+
+				// Flatten group items for matching
+				const groupItems: any[] = [];
+				for (const group of deviceData.groups) {
+					const items = Array.isArray(group?.Items) ? group.Items : [];
+					items.forEach((item: any) => {
+						groupItems.push({
+							...item,
+							groupId: group.id,
+							annotationType: group?.metadata?.annotationType,
+						});
+					});
+				}
+
+				// Process each period with shift splitting
+				for (const period of deviceData.periods) {
+					// 1. Determine effective start/end
+					const pStart = new Date(period.startTime);
+					const now = new Date();
+					const pEnd = period.isOngoing ? now : period.endTime ? new Date(period.endTime) : now;
+
+					const startMs = pStart.getTime();
+					const endMs = pEnd.getTime();
+
+					// 2. Generate boundaries (08:00 IST = 02:30 UTC, 20:00 IST = 14:30 UTC)
+					// We iterate from start day to end day
+					const boundaries: number[] = [];
+					const current = new Date(pStart);
+					current.setUTCHours(0, 0, 0, 0); // Start of UTC day
+
+					// Look a bit back and forward to be safe
+					const finalEnd = new Date(pEnd);
+					finalEnd.setUTCDate(finalEnd.getUTCDate() + 1);
+
+					while (current <= finalEnd) {
+						// 02:30 UTC
+						const b1 = new Date(current);
+						b1.setUTCHours(2, 30, 0, 0);
+						if (b1.getTime() > startMs && b1.getTime() < endMs) boundaries.push(b1.getTime());
+
+						// 14:30 UTC
+						const b2 = new Date(current);
+						b2.setUTCHours(14, 30, 0, 0);
+						if (b2.getTime() > startMs && b2.getTime() < endMs) boundaries.push(b2.getTime());
+
+						// Next day
+						current.setUTCDate(current.getUTCDate() + 1);
+					}
+
+					boundaries.sort((a, b) => a - b);
+
+					// 3. Create segments
+					const segments: { start: number; end: number }[] = [];
+					let lastTime = startMs;
+
+					for (const b of boundaries) {
+						segments.push({ start: lastTime, end: b });
+						lastTime = b;
+					}
+					// Add final segment
+					if (lastTime < endMs) {
+						segments.push({ start: lastTime, end: endMs });
+					}
+
+					// 4. Process segments
+					const queryStartMs = buildUtcFromLocalinfo(startDate, startTime).getTime();
+					const queryEndMs = buildUtcFromLocalinfo(endDate, endTime).getTime();
+
+					segments.forEach((seg, idx) => {
+						// Filter: Only show segments whose START TIME is within the selected time period
+						// This ensures we only display events that started during the selected range
+						if (seg.start < queryStartMs) return; // Started before selected period
+						if (seg.start >= queryEndMs) return; // Started after selected period
+
+						// Daily Time Filter: Ensure strictly within the daily time slot (IST)
+						const [sH, sM] = startTime.split(":").map(Number);
+						const [eH, eM] = endTime.split(":").map(Number);
+						const userStartMins = sH * 60 + sM;
+						const userEndMins = eH * 60 + eM;
+
+						// Convert segment start to IST time-of-day
+						// seg.start is UTC timestamp; IST is UTC+5:30
+						const istOffsetMs = 5.5 * 60 * 60 * 1000;
+						const segIstDate = new Date(seg.start + istOffsetMs);
+						const segMins = segIstDate.getUTCHours() * 60 + segIstDate.getUTCMinutes();
+
+						if (userStartMins <= userEndMins) {
+							// Standard range (e.g. 12:00 - 14:00)
+							if (segMins < userStartMins || segMins >= userEndMins) return;
+						} else {
+							// Cross-midnight range (e.g. 22:00 - 02:00)
+							// Reject if it falls in the gap (e.g. 02:00 to 22:00)
+							if (segMins >= userEndMins && segMins < userStartMins) return;
 						}
 
-						// Calculate duration
-						let actualDurationMinutes = period.durationMinutes;
-						if (period.isOngoing) {
-							const pSatrt = new Date(period.startTime);
-							const now = new Date();
-							actualDurationMinutes = (now.getTime() - pSatrt.getTime()) / (1000 * 60);
-						}
+						const segStartIso = new Date(seg.start).toISOString();
+						const segEndIso = new Date(seg.end).toISOString();
+						const durationMins = (seg.end - seg.start) / (1000 * 60);
 
-						// Match with existing item
-						const periodStartIso = normalizeIso(period.startTime);
-						const periodEndIso = normalizeIso(period.endTime ?? new Date().toISOString());
+						// Apply minimum duration filter (must match server-side minDurationMinutes)
+						const MIN_DURATION_MINUTES = 15;
+						if (durationMins < MIN_DURATION_MINUTES) return;
+
+						// Match metadata
+						// We try to match based on the FULL original period boundaries if possible,
+						// OR strictly match if there's an item that matches this specific segment.
+						// The original logic matched `period.startTime` to `item.segmentStart`.
+						// If we split, we might lose that 1-to-1 match for the split parts unless they were individually tagged.
+						// STRATEGY:
+						// 1. Try to find item matching THIS segment exactly.
+						// 2. If not found, try to find item matching the WHOLE period (inherited).
+						// Actually, typically in this DB, items are created for the specific range.
+						// If untagged, we rely on period.status.
+						// If we split an UNTAGGED period, both parts act as untagged.
+
+						const segStartNorm = normalizeIso(segStartIso);
+						const segEndNorm = normalizeIso(segEndIso);
 
 						const matchedItem = groupItems.find((item: any) => {
 							const itemStart = normalizeIso(item.segmentStart);
 							const itemEnd = normalizeIso(item.segmentEnd);
-							const isEventGroup = item.annotationType === "event"; // strict match
-							return itemStart === periodStartIso && itemEnd === periodEndIso && isEventGroup;
+							const isEventGroup = item.annotationType === "event";
+							return itemStart === segStartNorm && itemEnd === segEndNorm && isEventGroup;
 						});
 
 						const reasonCode = matchedItem?.metadata?.reasonCode ?? matchedItem?.notes ?? "";
 
 						// Format Date for display
-						const displayDate = new Date(period.startTime).toLocaleDateString("en-US", {
+						const displayDate = new Date(seg.start).toLocaleDateString("en-US", {
 							month: "short",
 							day: "numeric",
 							year: "numeric",
 						});
 
-						items.push({
-							id: `${deviceId}-${period.startTime}-${Math.random()}`,
+						allEvents.push({
+							id: `${deviceId}-${segStartIso}-${idx}`, // Unique ID for split
 							machineId: deviceId,
 							machineName: deviceName,
-							rawStartTime: period.startTime,
-							rawEndTime: period.endTime ?? new Date().toISOString(),
-							startTime: formatTimeToIST(period.startTime),
-							endTime: period.isOngoing ? "Ongoing" : formatTimeToIST(period.endTime ?? ""),
-							duration: formatDuration(actualDurationMinutes),
+							rawStartTime: segStartIso,
+							rawEndTime: segEndIso,
+							startTime: formatTimeToIST(segStartIso),
+							endTime: period.isOngoing && idx === segments.length - 1 ? "Ongoing" : formatTimeToIST(segEndIso),
+							duration: formatDuration(durationMins),
 							type: period.status,
 							reason: reasonCode ? String(reasonCode) : "",
 							notes: matchedItem?.notes || "",
 							itemId: matchedItem?.id ?? null,
 							groupId: matchedItem?.groupId ?? null,
 							metadata: matchedItem?.metadata || {},
-							isOngoing: period.isOngoing,
+							isOngoing: period.isOngoing && idx === segments.length - 1,
 							date: displayDate,
-							durationMinutes: actualDurationMinutes,
+							durationMinutes: durationMins,
 						});
-					}
-
-					return items;
-				} catch (err) {
-					console.error(`Failed to fetch for ${deviceName}`, err);
-					return [];
+					});
 				}
-			});
+			}
 
-			const results = await Promise.all(promises);
-			const flat = results.flat().sort((a, b) => new Date(b.rawStartTime).getTime() - new Date(a.rawStartTime).getTime());
-			setFetchedEvents(flat);
+			// Sort by most recent first
+			const sorted = allEvents.sort((a, b) => new Date(b.rawStartTime).getTime() - new Date(a.rawStartTime).getTime());
+			setFetchedEvents(sorted);
 			setStep(2);
 		} catch (error) {
 			console.error(error);
@@ -338,82 +472,101 @@ export default function BulkEditPage() {
 		const category = getReasonCategory(targetReason);
 		const reasonDescription = getReasonDescription(targetReason);
 
-		// Group by machine+group if exists, otherwise we'll have to create new groups for raw periods
-		// For Bulk Edit, if it doesn't have a groupId, it means it's a raw period. We need to CREATE a group for it.
-		// If it has a groupId, we UPDATE the item.
+		try {
+			// Prepare sync body for all operations
+			const syncBody: {
+				create?: any[];
+				update?: any[];
+			} = {};
 
-		let successCount = 0;
-		let failCount = 0;
+			// Group updates by groupId
+			const updatesByGroup = new Map<string, { deviceId: string; items: any[] }>();
+			const createsForNewGroups: any[] = [];
 
-		for (const ev of eventsToUpdate) {
-			try {
+			for (const ev of eventsToUpdate) {
+				const itemMetadata = {
+					...ev.metadata,
+					reasonCode: Number(targetReason),
+					reasonDescription,
+				};
+
 				if (ev.groupId && ev.itemId) {
-					// UPDATE Existing
-					await updateDeviceStateEventGroupItems({
+					// UPDATE Existing - group by groupId
+					if (!updatesByGroup.has(ev.groupId)) {
+						updatesByGroup.set(ev.groupId, {
+							deviceId: ev.machineId,
+							items: [],
+						});
+					}
+
+					updatesByGroup.get(ev.groupId)!.items.push({
+						id: ev.itemId,
+						segmentStart: ev.rawStartTime,
+						segmentEnd: ev.rawEndTime,
+						category,
+						scopeType: "DEVICE_STATUS",
+						metadata: itemMetadata,
+					});
+				} else {
+					// CREATE New (Raw period being tagged for first time)
+					createsForNewGroups.push({
 						deviceId: ev.machineId,
-						clusterId: lhtClusterId,
-						groupId: ev.groupId,
-						account,
+						rangeStart: ev.rawStartTime,
+						rangeEnd: ev.rawEndTime,
+						title: `EVENT-${ev.rawStartTime.split("T")[0]}`,
+						metadata: { annotationType: "event" },
 						items: [
 							{
-								id: ev.itemId,
 								segmentStart: ev.rawStartTime,
 								segmentEnd: ev.rawEndTime,
+								state: ev.type,
 								category,
 								scopeType: "DEVICE_STATUS",
 								metadata: {
-									...ev.metadata,
 									reasonCode: Number(targetReason),
 									reasonDescription,
+									annotationType: "event",
 								},
 							},
 						],
 					});
-				} else {
-					// CREATE New (Raw period being tagged for first time)
-					const metadata = {
-						reasonCode: Number(targetReason),
-						reasonDescription,
-						annotationType: "event", // Mark as event group
-					};
-
-					// We need to create a group first? Or can we just create?
-					// Use createDeviceStateEventGroup for new
-					await createDeviceStateEventGroup({
-						deviceId: ev.machineId,
-						clusterId: lhtClusterId,
-						account,
-						body: {
-							rangeStart: ev.rawStartTime,
-							rangeEnd: ev.rawEndTime,
-							title: `Event-${ev.rawStartTime.split("T")[0]}`,
-							metadata: { annotationType: "event" },
-							items: [
-								{
-									segmentStart: ev.rawStartTime,
-									segmentEnd: ev.rawEndTime,
-									state: ev.type,
-									category,
-									scopeType: "DEVICE_STATUS",
-									metadata,
-								},
-							],
-						},
-					});
 				}
-				successCount++;
-			} catch (err) {
-				console.error("Update failed for event", ev.id, err);
-				failCount++;
+
+				// Update progress
+				setUpdateProgress((prev) => ({ ...prev, current: prev.current + 1 }));
 			}
-			setUpdateProgress((prev) => ({ ...prev, current: prev.current + 1 }));
-		}
 
-		setIsUpdating(false);
-		toast.success(`Updated ${successCount} events. ${failCount > 0 ? `${failCount} failed.` : ""}`);
+			// Build sync body
+			if (createsForNewGroups.length > 0) {
+				syncBody.create = createsForNewGroups;
+			}
 
-		if (successCount > 0) {
+			if (updatesByGroup.size > 0) {
+				syncBody.update = Array.from(updatesByGroup.entries()).map(([groupId, data]) => ({
+					groupId,
+					deviceId: data.deviceId,
+					items: {
+						update: data.items,
+					},
+				}));
+			}
+
+			// Execute single sync call for all operations
+			if (Object.keys(syncBody).length > 0) {
+				await syncDeviceStateEventGroups({
+					clusterId: lhtClusterId,
+					account,
+					body: syncBody,
+				});
+			}
+
+			setIsUpdating(false);
+			toast.success(`Successfully updated ${eventsToUpdate.length} events`);
 			router.push("/data");
+		} catch (err) {
+			console.error("Batch update failed:", err);
+			setIsUpdating(false);
+			toast.error("Batch update failed: " + (err as any).message);
 		}
 	};
 
@@ -553,7 +706,13 @@ export default function BulkEditPage() {
 
 									{/* Status Filter */}
 									<div>
-										<AssignmentField label="Status">
+										<AssignmentField
+											label={
+												<span>
+													Status <span className="text-red-500">*</span>
+												</span>
+											}
+										>
 											<div className="flex flex-wrap gap-2">
 												{STATUS_OPTIONS.map((st) => (
 													<button

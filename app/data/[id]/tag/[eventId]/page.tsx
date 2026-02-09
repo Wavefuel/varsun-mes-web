@@ -325,7 +325,7 @@ export default function EventGroupingPage() {
 					body: {
 						rangeStart: fromDateUTC.toISOString(),
 						rangeEnd: toDateUTC.toISOString(),
-						title: `Event-${fromDateUTC.toISOString().split("T")[0]}-${toDateUTC.toISOString().split("T")[0]}`,
+						title: `EVENT-${fromDateUTC.toISOString().split("T")[0]}-${toDateUTC.toISOString().split("T")[0]}`,
 						tags: tagsText.trim()
 							? tagsText
 									.split(",")
@@ -417,7 +417,7 @@ export default function EventGroupingPage() {
 								</button>
 								<button
 									type="submit"
-									form="event-grouping-form"
+									form="EVENT-grouping-form"
 									disabled={isSaving}
 									className="bg-primary text-white px-3 py-1.5 rounded-lg font-bold text-xs shadow-sm active:scale-95 transition-transform disabled:opacity-80 disabled:pointer-events-none min-w-[60px] flex justify-center items-center"
 								>
@@ -464,7 +464,7 @@ export default function EventGroupingPage() {
 						</div>
 
 						<form
-							id="event-grouping-form"
+							id="EVENT-grouping-form"
 							className={cn("!p-4 !space-y-2", isSaving && "opacity-60 pointer-events-none")}
 							onSubmit={handleSave}
 						>

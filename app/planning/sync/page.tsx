@@ -8,12 +8,9 @@ import { twMerge } from "tailwind-merge";
 
 import Loader from "@/components/Loader";
 import { useData } from "@/context/DataContext";
-import {
-	createDeviceStateEventGroupsManyByCluster,
-	updateDeviceStateEventGroupsManyByCluster,
-	deleteDeviceStateEventGroupItemsManyByCluster,
-} from "@/utils/scripts";
+import { syncDeviceStateEventGroups } from "@/utils/scripts";
 import { fetchErpSchedule } from "@/app/actions/erp";
+import { getShiftDisplayName } from "@/utils/shiftUtils";
 
 function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
@@ -66,7 +63,8 @@ export default function PlanningSyncPage() {
 				return;
 			}
 
-			const erpShiftCode = currentShift === "Night" ? "E" : "D";
+			// Map shift to ERP code: Day=D, General=G, Night=E
+			const erpShiftCode = currentShift === "Night" ? "E" : currentShift === "General" ? "G" : "D";
 			const erpData = await fetchErpSchedule(currentDate, erpShiftCode);
 
 			console.log("ERP Data:", erpData);
@@ -88,32 +86,63 @@ export default function PlanningSyncPage() {
 				const ShiftCode = rawItem.ShiftCode;
 				const WorkdayCode = rawItem.WorkdayCode;
 
-				if (ShiftCode === "G") continue;
-				if (WorkdayCode !== currentDate) continue;
+				if (WorkdayCode !== currentDate) {
+					console.log("Skipping due to date mismatch:", WorkdayCode, currentDate);
+					continue;
+				}
 
 				const isDayView = currentShift === "Day";
-				if (isDayView && ShiftCode !== "D") continue;
-				if (!isDayView && ShiftCode !== "E") continue;
+				const isGeneralView = currentShift === "General";
+				const isNightView = currentShift === "Night";
 
-				console.log("Raw Item:", rawItem);
+				if (isDayView && ShiftCode !== "D") {
+					console.log("Skipping Day item:", ShiftCode);
+					continue;
+				}
+				// if (isGeneralView && ShiftCode !== "G") continue; // Relaxed for General
+				if (isGeneralView && ShiftCode !== "G") {
+					console.log("Warning: General item has ShiftCode:", ShiftCode);
+				}
+				if (isNightView && ShiftCode !== "E") {
+					console.log("Skipping Night item:", ShiftCode);
+					continue;
+				}
+
+				console.log("Processing Item for", currentShift, ":", rawItem);
 
 				const WorkOrder = String(rawItem.RouteCardNbr || "");
 				const ProcessID = String(rawItem.ProcessID || "");
 				const OperatorCode = String(rawItem.OperatorCode || "");
+				const OperatorName = String(rawItem.OperatorName || rawItem.Operator || rawItem.Name || OperatorCode || "");
 				const PartNumber = String(rawItem.ItemCode || "");
 				const QtyPlanned = Number(rawItem.QtyPlanned || 0);
 				const WorkCenterCode = String(rawItem.WorkCenterCode || "");
 
-				if (!WorkOrder) continue;
+				if (!WorkOrder) {
+					console.log("Skipping due to missing WorkOrder:", rawItem);
+					continue;
+				}
 
 				const device = globalDevices.find((d) => d.foreignId === WorkCenterCode);
-				if (!device) continue;
+				if (!device) {
+					console.log(
+						"Skipping due to device not found. WorkCenterCode:",
+						WorkCenterCode,
+						"Available devices:",
+						globalDevices.map((d) => d.foreignId),
+					);
+					continue;
+				}
+				console.log("✓ Matched device:", device.deviceName, "for WorkCenter:", WorkCenterCode);
 
 				// Timestamps
 				const [y, m, day] = currentDate.split("-").map(Number);
 				const istOffset = 5.5 * 3600 * 1000;
 				let rangeStartMs, rangeEndMs;
-				if (ShiftCode === "D") {
+				if (ShiftCode === "G") {
+					rangeStartMs = Date.UTC(y, m - 1, day, 8, 30, 0) - istOffset;
+					rangeEndMs = Date.UTC(y, m - 1, day, 17, 30, 0) - istOffset;
+				} else if (ShiftCode === "D") {
 					rangeStartMs = Date.UTC(y, m - 1, day, 8, 0, 0) - istOffset;
 					rangeEndMs = Date.UTC(y, m - 1, day, 20, 0, 0) - istOffset;
 				} else {
@@ -130,8 +159,8 @@ export default function PlanningSyncPage() {
 				const commonMetadata = {
 					workOrder: WorkOrder,
 					partNumber: PartNumber,
-					operator: "",
-					operatorName: "",
+					operator: OperatorName,
+					operatorName: OperatorName,
 					operatorCode: OperatorCode,
 					opNumber: [ProcessID],
 					opBatchQty: QtyPlanned,
@@ -223,104 +252,134 @@ export default function PlanningSyncPage() {
 			const updates = changes.updates.filter((i) => selectedIds.has(i.id));
 			const deletes = changes.deletes.filter((i) => selectedIds.has(i.id));
 
-			let addCount = 0,
-				updateCount = 0,
-				deleteCount = 0;
+			// Prepare single sync body for all devices
+			const syncBody: {
+				create?: any[];
+				update?: any[];
+				delete?: string[];
+			} = {};
 
-			// Updates + Adds-to-existing-groups (single bulk call)
-			const updateGroups = updates.map((item) => {
-				const p = item.payload;
-				return {
-					deviceId: p.deviceId,
-					groupId: p.groupId,
-					items: { update: p.items },
-				};
-			});
+			// Group adds by device and shift for proper grouping
+			const addsByDeviceShift = new Map<string, { deviceId: string; startIso: string; endIso: string; items: any[] }>();
 
-			const addItemsByGroup = new Map<string, { deviceId: string; groupId: string; items: any[] }>();
-			const createGroups: any[] = [];
+			for (const item of adds) {
+				const { deviceId, startIso, endIso, metadata } = item.payload;
+				const key = `${deviceId}|${startIso}|${endIso}`;
 
-			// Deletes
-			const deleteItems = deletes.map((d) => ({ deviceId: d.payload.deviceId, itemId: d.payload.itemId }));
-			if (deleteItems.length > 0) {
-				await deleteDeviceStateEventGroupItemsManyByCluster({
-					clusterId: lhtClusterId!,
-					applicationId: lhtApplicationId!,
-					account: { id: lhtAccountId! },
-					items: deleteItems,
+				if (!addsByDeviceShift.has(key)) {
+					addsByDeviceShift.set(key, { deviceId, startIso, endIso, items: [] });
+				}
+
+				addsByDeviceShift.get(key)!.items.push({
+					segmentStart: startIso,
+					segmentEnd: endIso,
+					category: "PLANNED_OUTPUT",
+					metadata,
 				});
-				deleteCount = deleteItems.length;
 			}
 
-			// Adds (split into create-items vs create-groups)
-			for (const item of adds) {
-				const { deviceId, metadata, startIso, endIso } = item.payload;
+			// Process creates - check for existing groups and convert to updates if needed
+			for (const [key, groupData] of addsByDeviceShift) {
+				const { deviceId, startIso, endIso, items } = groupData;
 
+				// Check if a compatible group already exists
 				const targetGroup = globalAssignments?.find(
-					(g) =>
-						g.lhtDeviceId === deviceId &&
-						g.date === currentDate &&
-						g.shift === (currentShift === "Day" ? "Day Shift (S1)" : "Night Shift (S2)") &&
-						g.lhtGroupId,
+					(g) => g.lhtDeviceId === deviceId && g.date === currentDate && g.shift === getShiftDisplayName(currentShift) && g.lhtGroupId,
 				);
 
 				if (targetGroup?.lhtGroupId) {
-					const key = `${deviceId}:${targetGroup.lhtGroupId}`;
-					const entry = addItemsByGroup.get(key) ?? { deviceId, groupId: targetGroup.lhtGroupId, items: [] };
-					entry.items.push({
-						segmentStart: startIso,
-						segmentEnd: endIso,
-						category: "PLANNED_OUTPUT",
-						metadata,
+					// Add to updates - add items to existing group
+					if (!syncBody.update) {
+						syncBody.update = [];
+					}
+					syncBody.update.push({
+						groupId: targetGroup.lhtGroupId,
+						deviceId,
+						items: {
+							create: items,
+						},
 					});
-					addItemsByGroup.set(key, entry);
 				} else {
-					createGroups.push({
+					// Create new group
+					if (!syncBody.create) {
+						syncBody.create = [];
+					}
+					syncBody.create.push({
 						deviceId,
 						rangeStart: startIso,
 						rangeEnd: endIso,
 						title: `PLANNED_OUTPUT-${currentDate}`,
-						items: [
-							{
-								segmentStart: startIso,
-								segmentEnd: endIso,
-								category: "PLANNED_OUTPUT",
-								metadata,
-							},
-						],
+						items: items,
 					});
 				}
 			}
 
-			const addItemGroups = Array.from(addItemsByGroup.values()).map((group) => ({
-				deviceId: group.deviceId,
-				groupId: group.groupId,
-				items: { create: group.items },
-			}));
+			// Process updates
+			if (updates.length > 0) {
+				if (!syncBody.update) {
+					syncBody.update = [];
+				}
+				for (const item of updates) {
+					const { deviceId, groupId, items: itemsToUpdate } = item.payload;
+					syncBody.update.push({
+						groupId,
+						deviceId,
+						items: {
+							update: itemsToUpdate,
+						},
+					});
+				}
+			}
 
-			const updateManyGroups = [...updateGroups, ...addItemGroups];
-			if (updateManyGroups.length > 0) {
-				await updateDeviceStateEventGroupsManyByCluster({
+			// Process deletes - group items by their parent group
+			if (deletes.length > 0) {
+				const itemsByGroup = new Map<string, { deviceId: string; itemIds: string[] }>();
+
+				for (const item of deletes) {
+					const { deviceId, itemId } = item.payload;
+					const assignment = globalAssignments?.find((a) => a.lhtItemId === itemId);
+
+					if (assignment?.lhtGroupId) {
+						if (!itemsByGroup.has(assignment.lhtGroupId)) {
+							itemsByGroup.set(assignment.lhtGroupId, { deviceId, itemIds: [] });
+						}
+						itemsByGroup.get(assignment.lhtGroupId)!.itemIds.push(itemId);
+					}
+				}
+
+				// Add delete operations to updates
+				if (itemsByGroup.size > 0) {
+					if (!syncBody.update) {
+						syncBody.update = [];
+					}
+
+					for (const [groupId, data] of itemsByGroup) {
+						syncBody.update.push({
+							groupId,
+							deviceId: data.deviceId,
+							items: {
+								delete: data.itemIds,
+							},
+						});
+					}
+				}
+			}
+
+			// Execute single sync call for all devices
+			if (Object.keys(syncBody).length > 0) {
+				await syncDeviceStateEventGroups({
 					clusterId: lhtClusterId!,
 					applicationId: lhtApplicationId!,
 					account: { id: lhtAccountId! },
-					groups: updateManyGroups,
+					body: syncBody,
 				});
 			}
 
-			if (createGroups.length > 0) {
-				await createDeviceStateEventGroupsManyByCluster({
-					clusterId: lhtClusterId!,
-					applicationId: lhtApplicationId!,
-					account: { id: lhtAccountId! },
-					groups: createGroups,
-				});
-			}
+			const totalCreated = adds.length;
+			const totalUpdated = updates.length;
+			const totalDeleted = deletes.length;
 
-			addCount = adds.length;
-			updateCount = updates.length;
-
-			toast.success(`Synced: +${addCount}, ~${updateCount}, -${deleteCount}`);
+			toast.success(`Synced: +${totalCreated}, ~${totalUpdated}, -${totalDeleted}`);
 			setGlobalDataDate(""); // Force refresh
 			router.push("/planning"); // Go back
 		} catch (e: any) {

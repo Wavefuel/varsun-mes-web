@@ -119,9 +119,9 @@ export async function createDeviceStateEventGroup(data: CreateDeviceStateEventGr
 				? buildDayRange(data.body.date)
 				: data.body.rangeStart && data.body.rangeEnd
 					? {
-						rangeStart: formatRangeValue(data.body.rangeStart),
-						rangeEnd: formatRangeValue(data.body.rangeEnd),
-					}
+							rangeStart: formatRangeValue(data.body.rangeStart),
+							rangeEnd: formatRangeValue(data.body.rangeEnd),
+						}
 					: null;
 		if (!range) {
 			throw new Error("Invalid Input, rangeStart/rangeEnd or date is required.");
@@ -200,9 +200,9 @@ export async function createDeviceStateEventGroupsManyByCluster(data: CreateDevi
 					? buildDayRange(body.date)
 					: body.rangeStart && body.rangeEnd
 						? {
-							rangeStart: formatRangeValue(body.rangeStart),
-							rangeEnd: formatRangeValue(body.rangeEnd),
-						}
+								rangeStart: formatRangeValue(body.rangeStart),
+								rangeEnd: formatRangeValue(body.rangeEnd),
+							}
 						: null;
 			if (!range) {
 				throw new Error(`Invalid Input, rangeStart/rangeEnd or date is required at index ${index}.`);
@@ -529,10 +529,10 @@ export async function updateDeviceStateEventGroup(data: UpdateDeviceStateEventGr
 				group: data.body.group,
 				items: data.body.items
 					? {
-						create: Array.isArray(data.body.items.create) ? data.body.items.create.map(normalizeCreateItemPayload) : undefined,
-						update: Array.isArray(data.body.items.update) ? data.body.items.update.map(normalizeUpdateItemPayload) : undefined,
-						delete: Array.isArray(data.body.items.delete) ? data.body.items.delete : undefined,
-					}
+							create: Array.isArray(data.body.items.create) ? data.body.items.create.map(normalizeCreateItemPayload) : undefined,
+							update: Array.isArray(data.body.items.update) ? data.body.items.update.map(normalizeUpdateItemPayload) : undefined,
+							delete: Array.isArray(data.body.items.delete) ? data.body.items.delete : undefined,
+						}
 					: undefined,
 			},
 			{
@@ -583,24 +583,26 @@ export async function updateDeviceStateEventGroupsManyByCluster(data: UpdateDevi
 						group: group.body.group,
 						items: items
 							? {
-								create: Array.isArray(items.create) ? items.create.map(normalizeCreateItemPayload) : undefined,
-								update: Array.isArray(items.update) ? items.update.map(normalizeUpdateItemPayload) : undefined,
-								delete: Array.isArray(items.delete) ? items.delete : undefined,
-							}
+									create: Array.isArray(items.create) ? items.create.map(normalizeCreateItemPayload) : undefined,
+									update: Array.isArray(items.update) ? items.update.map(normalizeUpdateItemPayload) : undefined,
+									delete: Array.isArray(items.delete) ? items.delete : undefined,
+								}
 							: undefined,
 					},
 				};
 			}
 
-			const groupPatch = group.group ?? pickDefined({
-				rangeStart: group.rangeStart,
-				rangeEnd: group.rangeEnd,
-				title: group.title,
-				description: group.description,
-				notes: group.notes,
-				metadata: group.metadata,
-				tags: group.tags,
-			});
+			const groupPatch =
+				group.group ??
+				pickDefined({
+					rangeStart: group.rangeStart,
+					rangeEnd: group.rangeEnd,
+					title: group.title,
+					description: group.description,
+					notes: group.notes,
+					metadata: group.metadata,
+					tags: group.tags,
+				});
 
 			return {
 				deviceId: group.deviceId,
@@ -608,10 +610,10 @@ export async function updateDeviceStateEventGroupsManyByCluster(data: UpdateDevi
 				group: Object.keys(groupPatch || {}).length ? groupPatch : undefined,
 				items: group.items
 					? {
-						create: Array.isArray(group.items.create) ? group.items.create.map(normalizeCreateItemPayload) : undefined,
-						update: Array.isArray(group.items.update) ? group.items.update.map(normalizeUpdateItemPayload) : undefined,
-						delete: Array.isArray(group.items.delete) ? group.items.delete : undefined,
-					}
+							create: Array.isArray(group.items.create) ? group.items.create.map(normalizeCreateItemPayload) : undefined,
+							update: Array.isArray(group.items.update) ? group.items.update.map(normalizeUpdateItemPayload) : undefined,
+							delete: Array.isArray(group.items.delete) ? group.items.delete : undefined,
+						}
 					: undefined,
 			};
 		});
@@ -781,7 +783,6 @@ interface DeleteDeviceStateEventGroupItemsManyData {
  * @returns The deletion result
  */
 
-
 export interface DeleteDeviceStateEventGroupItemsManyByClusterData {
 	clusterId: string;
 	applicationId?: string;
@@ -858,6 +859,192 @@ export async function deleteDeviceStateEventGroup(data: DeleteDeviceStateEventGr
 		const deviceStateEventsUrl = `${data.clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
 
 		const response = await lightHouseAPIHandler.delete(`${deviceStateEventsUrl}/groups/delete/one/${data.groupId}`, {
+			headers: {
+				"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
+			},
+		});
+
+		return response.data?.data;
+	} catch (error) {
+		throw error;
+	}
+}
+
+// ============================================================================
+// Sync API - Batch Operations
+// ============================================================================
+
+export interface SyncGroupCreateInput {
+	deviceId: string;
+	rangeStart: string | Date;
+	rangeEnd: string | Date;
+	title?: string | null;
+	description?: string | null;
+	notes?: string | null;
+	metadata?: JsonValue;
+	tags?: string[] | null;
+	items: DeviceStateEventItemInput[];
+}
+
+export interface SyncItemUpdateInput {
+	id: string;
+	segmentStart?: string | Date;
+	segmentEnd?: string | Date;
+	category?: string | null;
+	impact?: number;
+	scopeType?: string | null;
+	scopeKey?: string | null;
+	notes?: string | null;
+	metadata?: JsonValue;
+}
+
+export interface SyncGroupUpdateInput {
+	groupId: string;
+	deviceId: string;
+	group?: {
+		rangeStart?: string | Date;
+		rangeEnd?: string | Date;
+		title?: string | null;
+		description?: string | null;
+		notes?: string | null;
+		metadata?: JsonValue;
+		tags?: string[] | null;
+	};
+	items?: {
+		create?: DeviceStateEventItemInput[];
+		update?: SyncItemUpdateInput[];
+		delete?: string[];
+	};
+}
+
+export interface SyncDeviceStateEventGroupsData {
+	clusterId: string;
+	applicationId?: string;
+	account: Account;
+	body: {
+		create?: SyncGroupCreateInput[];
+		update?: SyncGroupUpdateInput[];
+		delete?: string[]; // Group IDs to delete
+	};
+}
+
+/**
+ * Batch synchronization endpoint for device state event groups.
+ * Supports atomic create, update, and delete operations in a single transaction.
+ * Optimized for high-performance bulk operations with proper cache invalidation.
+ *
+ * @param data - The data required for sync operations
+ * @returns Object containing created groups, updated group IDs, and deleted group IDs
+ *
+ * @example
+ * const result = await syncDeviceStateEventGroups({
+ *   clusterId: "cluster-123",
+ *   deviceId: "device-456",
+ *   account: userAccount,
+ *   body: {
+ *     create: [
+ *       {
+ *         deviceId: "device-456",
+ *         rangeStart: "2024-01-01T00:00:00Z",
+ *         rangeEnd: "2024-01-01T01:00:00Z",
+ *         title: "Downtime Event",
+ *         items: [
+ *           {
+ *             segmentStart: "2024-01-01T00:00:00Z",
+ *             segmentEnd: "2024-01-01T00:30:00Z",
+ *             category: "DOWNTIME"
+ *           }
+ *         ]
+ *       }
+ *     ],
+ *     update: [
+ *       {
+ *         groupId: "group-789",
+ *         deviceId: "device-456",
+ *         group: { title: "Updated Title" }
+ *       }
+ *     ],
+ *     delete: ["group-old-1", "group-old-2"]
+ *   }
+ * });
+ */
+export async function syncDeviceStateEventGroups(data: SyncDeviceStateEventGroupsData) {
+	try {
+		if (!data.clusterId) {
+			throw new Error("Invalid Input, clusterId is required.");
+		}
+		if (!data.account) {
+			throw new Error("Invalid Input, account is required.");
+		}
+		if (!data.body) {
+			throw new Error("Invalid Input, body is required.");
+		}
+
+		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
+		// Use cluster-level multi-device sync endpoint
+		// Base URL already includes /api/cluster/application, so we only need clusterId/state-events/applicationId
+		const url = `${data.clusterId}/state-events/${applicationId}/groups/sync`;
+
+		// Prepare the payload
+		const payload: any = {};
+
+		// Process creates
+		if (data.body.create && data.body.create.length > 0) {
+			payload.create = data.body.create.map((group) => {
+				const normalizedItems = group.items.map((item) => normalizeCreateItemPayload(item));
+				return {
+					deviceId: group.deviceId,
+					rangeStart: formatRangeValue(group.rangeStart),
+					rangeEnd: formatRangeValue(group.rangeEnd),
+					title: group.title,
+					description: group.description,
+					notes: group.notes,
+					metadata: group.metadata,
+					tags: group.tags,
+					items: normalizedItems,
+				};
+			});
+		}
+
+		// Process updates
+		if (data.body.update && data.body.update.length > 0) {
+			payload.update = data.body.update.map((update) => {
+				const result: any = {
+					groupId: update.groupId,
+					deviceId: update.deviceId,
+				};
+
+				if (update.group) {
+					result.group = {
+						...update.group,
+						rangeStart: update.group.rangeStart ? formatRangeValue(update.group.rangeStart) : undefined,
+						rangeEnd: update.group.rangeEnd ? formatRangeValue(update.group.rangeEnd) : undefined,
+					};
+				}
+
+				if (update.items) {
+					result.items = {};
+					if (update.items.create) {
+						result.items.create = update.items.create.map((item) => normalizeCreateItemPayload(item));
+					}
+					if (update.items.update) {
+						result.items.update = update.items.update.map((item) => normalizeUpdateItemPayload(item as any));
+					}
+					if (update.items.delete) {
+						result.items.delete = update.items.delete;
+					}
+				}
+
+				return result;
+			});
+		}
+
+		// Process deletes
+		if (data.body.delete && data.body.delete.length > 0) {
+			payload.delete = data.body.delete;
+		}
+
+		const response = await lightHouseAPIHandler.post(url, payload, {
 			headers: {
 				"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
 			},
@@ -992,19 +1179,19 @@ export async function readDeviceStateEventItemsByDate(data: ReadDeviceStateEvent
 
 	const items = Array.isArray(groups)
 		? (groups as unknown[]).flatMap((groupUnknown) => {
-			const group = (groupUnknown && typeof groupUnknown === "object" ? (groupUnknown as Record<string, unknown>) : {}) as Record<
-				string,
-				unknown
-			>;
-			const groupItems = Array.isArray(group?.Items) ? (group.Items as unknown[]) : [];
-			const groupId = group.id;
-			const groupTitle = group.title;
-			return groupItems.map((itemUnknown) => ({
-				...(itemUnknown && typeof itemUnknown === "object" ? (itemUnknown as Record<string, unknown>) : {}),
-				groupId,
-				groupTitle,
-			}));
-		})
+				const group = (groupUnknown && typeof groupUnknown === "object" ? (groupUnknown as Record<string, unknown>) : {}) as Record<
+					string,
+					unknown
+				>;
+				const groupItems = Array.isArray(group?.Items) ? (group.Items as unknown[]) : [];
+				const groupId = group.id;
+				const groupTitle = group.title;
+				return groupItems.map((itemUnknown) => ({
+					...(itemUnknown && typeof itemUnknown === "object" ? (itemUnknown as Record<string, unknown>) : {}),
+					groupId,
+					groupTitle,
+				}));
+			})
 		: [];
 
 	return items;
@@ -1047,15 +1234,17 @@ export async function fetchDeviceList(data: FetchDeviceListData): Promise<Device
 				deviceStatus: true,
 				createdAt: true,
 				updatedAt: true,
+				Item: true,
 			},
 			...(data.query?.page &&
 				data.query?.limit && {
-				skip: (data.query.page - 1) * data.query.limit,
-				take: data.query.limit,
-			}),
+					skip: (data.query.page - 1) * data.query.limit,
+					take: data.query.limit,
+				}),
 		});
 
-		return response.data?.data ?? [];
+		const devices = response.data?.data ?? [];
+		return devices.filter((device: any) => !device.Item?.isGateway);
 	} catch (error) {
 		throw error;
 	}
@@ -1222,11 +1411,148 @@ export async function fetchDeviceCount(data: { clusterId: string; applicationId?
 		if (!applicationId) throw new Error("Invalid Input, APPLICATION_ID is required.");
 
 		const response = await lightHouseAPIHandler.post(`${data.clusterId}/device/${applicationId}/count`, {
-			where: { clusterId: data.clusterId }
+			where: { clusterId: data.clusterId },
 		});
 		return response.data?.data ?? 0;
 	} catch (error) {
 		console.error("Failed to fetch device count:", error);
 		return 0;
+	}
+}
+
+// ============================================================================
+// Batch Read API - Multi-Device Status Periods and Event Groups
+// ============================================================================
+
+/**
+ * Batch Read API Types
+ */
+export interface BatchReadRequest {
+	deviceIds: string[];
+	startDate: string;
+	endDate: string;
+	startTime?: string;
+	endTime?: string;
+	statuses?: string[];
+	minDurationMinutes?: number;
+}
+
+export interface StatusPeriod {
+	status: string;
+	startTime: string;
+	endTime: string;
+	durationSeconds: number;
+	durationMinutes: number;
+	isOngoing: boolean;
+}
+
+export interface EventItem {
+	id: string;
+	eventGroupId: string;
+	deviceId: string;
+	segmentStart: string;
+	segmentEnd: string;
+	category: string;
+	impact: number | null;
+	scopeType: string | null;
+	scopeKey: string | null;
+	notes: string | null;
+	metadata: Record<string, any>;
+}
+
+export interface EventGroup {
+	id: string;
+	deviceId: string;
+	rangeStart: string;
+	rangeEnd: string;
+	title: string;
+	description: string | null;
+	notes: string | null;
+	metadata: Record<string, any>;
+	tags: string[];
+	Items: EventItem[];
+}
+
+export interface DeviceBatchData {
+	deviceName: string;
+	foreignId: string;
+	periods: StatusPeriod[];
+	groups: EventGroup[];
+}
+
+export interface BatchReadResponse {
+	data: {
+		[deviceId: string]: DeviceBatchData;
+	};
+	meta: {
+		deviceCount: number;
+		totalPeriods: number;
+		totalGroups: number;
+	};
+	message: string;
+}
+
+export interface BatchReadData {
+	clusterId: string;
+	applicationId?: string;
+	body: BatchReadRequest;
+}
+
+/**
+ * Batch Read API - Fetch status periods and event groups for multiple devices
+ *
+ * This replaces 2N individual API calls with a single batch call.
+ * Combines fetchDeviceStatusPeriods + readDeviceStateEventGroupsWithItems for multiple devices.
+ *
+ * @param data - Batch read request data
+ * @returns Combined periods and groups data for all devices
+ *
+ * @example
+ * const result = await batchReadDeviceStateEvents({
+ *   clusterId: 'cluster-123',
+ *   body: {
+ *     deviceIds: ['device-1', 'device-2', 'device-3'],
+ *     startDate: '2026-02-06',
+ *     endDate: '2026-02-06',
+ *     statuses: ['IDLE', 'OFFLINE'],
+ *     minDurationMinutes: 15
+ *   }
+ * });
+ *
+ * // Access data by deviceId
+ * const device1Data = result.data['device-1'];
+ * console.log(device1Data.periods);  // Status periods
+ * console.log(device1Data.groups);   // Event groups with items
+ */
+export async function batchReadDeviceStateEvents(data: BatchReadData): Promise<BatchReadResponse> {
+	try {
+		if (!data.clusterId) {
+			throw new Error("Invalid Input, clusterId is required.");
+		}
+		if (!data.body.deviceIds || data.body.deviceIds.length === 0) {
+			throw new Error("Invalid Input, deviceIds array is required.");
+		}
+		if (!data.body.startDate || !data.body.endDate) {
+			throw new Error("Invalid Input, startDate and endDate are required.");
+		}
+
+		const applicationId = data.applicationId || process.env.NEXT_PUBLIC_APPLICATION_ID;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
+
+		// Construct URL: /api/cluster/application/:clusterId/state-events/:applicationId/groups/batch-read
+		const url = `${data.clusterId}/state-events/${applicationId}/groups/batch-read`;
+
+		const response = await lightHouseAPIHandler.post(url, data.body, {
+			headers: {
+				"x-application-secret-key": process.env.NEXT_PUBLIC_APPLICATION_SECRET_KEY!,
+			},
+		});
+
+		return response.data;
+	} catch (error) {
+		console.error("Batch read failed:", error);
+		throw error;
 	}
 }

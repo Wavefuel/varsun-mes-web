@@ -27,6 +27,7 @@ import {
 import { formatTimeToIST } from "@/utils/dateUtils";
 import { fetchErpSchedule } from "@/app/actions/erp";
 import { STORAGE_KEY } from "@/components/AuthGuard";
+import { buildUtcRangeFromIstDate, getShiftDisplayName } from "@/utils/shiftUtils";
 
 function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
@@ -171,24 +172,10 @@ export default function PlanningPage() {
 
 		setIsLoading(true);
 
-		// Calculate shift-based range
-		let start, end;
-		const [y, m, day] = currentDate.split("-").map(Number);
-		const istOffset = 5.5 * 3600 * 1000;
-
-		if (currentShift === "Day") {
-			// Day Shift: 8AM to 8PM
-			const dayStartUTC = Date.UTC(y, m - 1, day, 8, 0, 0) - istOffset;
-			const dayEndUTC = Date.UTC(y, m - 1, day, 20, 0, 0) - istOffset;
-			start = new Date(dayStartUTC).toISOString();
-			end = new Date(dayEndUTC).toISOString();
-		} else {
-			// Night Shift: 8PM to 8AM Next Day
-			const nightStartUTC = Date.UTC(y, m - 1, day, 20, 0, 0) - istOffset;
-			const nightEndUTC = Date.UTC(y, m - 1, day + 1, 8, 0, 0) - istOffset;
-			start = new Date(nightStartUTC).toISOString();
-			end = new Date(nightEndUTC).toISOString();
-		}
+		// Calculate shift-based range using utility
+		const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate, currentShift);
+		const start = fromDateUTC.toISOString();
+		const end = toDateUTC.toISOString();
 
 		let cancelled = false;
 
@@ -204,7 +191,7 @@ export default function PlanningPage() {
 				if (cancelled) return;
 				const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
 				const mapped: Assignment[] = groups.flatMap((group) => {
-					const groupShift = currentShift === "Day" ? "Day Shift (S1)" : "Night Shift (S2)";
+					const groupShift = getShiftDisplayName(currentShift);
 
 					const deviceId = typeof group?.deviceId === "string" ? group.deviceId : "";
 					const machineName = (() => {
@@ -245,7 +232,7 @@ export default function PlanningPage() {
 								workOrder,
 								partNumber: String(metadata.partNumber ?? ""),
 								machine: machineName,
-								operator: String(metadata.operatorName ?? metadata.operator ?? metadata.name ?? ""),
+								operator: String(metadata.operatorName || metadata.operator || metadata.name || metadata.operatorCode || ""),
 								date: currentDate,
 								shift: groupShift,
 								startTime: startTimeValue,

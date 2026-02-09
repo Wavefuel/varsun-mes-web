@@ -14,6 +14,7 @@ import { useData } from "@/context/DataContext";
 import type { Order } from "@/lib/types";
 import { fetchDeviceList, readDeviceStateEventGroupsWithItemsByCluster, type DeviceSummary } from "@/utils/scripts";
 import { formatTimeToIST, getISTDate } from "@/utils/dateUtils";
+import { buildUtcRangeFromIstDate, getShiftDisplayName } from "@/utils/shiftUtils";
 
 function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
@@ -110,24 +111,10 @@ export default function StockPage() {
 
 		setIsLoading(true);
 
-		// Calculate shift-based range
-		let start, end;
-		const [y, m, day] = currentDate.split("-").map(Number);
-		const istOffset = 5.5 * 3600 * 1000;
-
-		if (currentShift === "Day") {
-			// Day Shift: 8AM to 8PM
-			const dayStartUTC = Date.UTC(y, m - 1, day, 8, 0, 0) - istOffset;
-			const dayEndUTC = Date.UTC(y, m - 1, day, 20, 0, 0) - istOffset;
-			start = new Date(dayStartUTC).toISOString();
-			end = new Date(dayEndUTC).toISOString();
-		} else {
-			// Night Shift: 8PM to 8AM Next Day
-			const nightStartUTC = Date.UTC(y, m - 1, day, 20, 0, 0) - istOffset;
-			const nightEndUTC = Date.UTC(y, m - 1, day + 1, 8, 0, 0) - istOffset;
-			start = new Date(nightStartUTC).toISOString();
-			end = new Date(nightEndUTC).toISOString();
-		}
+		// Calculate shift-based range using utility
+		const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate, currentShift);
+		const start = fromDateUTC.toISOString();
+		const end = toDateUTC.toISOString();
 
 		readDeviceStateEventGroupsWithItemsByCluster({
 			clusterId: lhtClusterId,
@@ -153,7 +140,7 @@ export default function StockPage() {
 
 				const groups: ApiEventGroup[] = Array.isArray(groupsUnknown) ? (groupsUnknown as ApiEventGroup[]) : [];
 				const mapped: Order[] = groups.flatMap((group) => {
-					const groupShift = currentShift === "Day" ? "Day Shift (S1)" : "Night Shift (S2)";
+					const groupShift = getShiftDisplayName(currentShift);
 
 					const deviceId = typeof group?.deviceId === "string" ? group.deviceId : "";
 					const machineName = (() => {
@@ -241,22 +228,46 @@ export default function StockPage() {
 	);
 
 	const consolidatedOrders = useMemo(() => {
-		const map = new Map<string, Order>();
-		sourceOrders.forEach((order) => {
-			const key = (order as any).workOrder || order.id;
-			if (!key) return;
+		const actuals: Order[] = [];
+		const planned: Order[] = [];
 
-			const existing = map.get(key);
-			if (!existing) {
-				map.set(key, order);
+		sourceOrders.forEach((o) => {
+			if (o.status === "ACTUAL_OUTPUT") {
+				actuals.push(o);
 			} else {
-				// Priority: ACTUAL_OUTPUT > PLANNED_OUTPUT
-				if (order.status === "ACTUAL_OUTPUT") {
-					map.set(key, order);
-				}
+				planned.push(o);
 			}
 		});
-		return Array.from(map.values());
+
+		// Create a mechanism to match Planned items to Actual items one-for-one.
+		// We use a pool of actuals to ensuring we only hide ONE planned item per ACTUAL item.
+		const actualsPool = [...actuals];
+
+		const filteredPlanned = planned.filter((p) => {
+			// Find a matching actual order
+			const matchIndex = actualsPool.findIndex((a) => {
+				const sameWO = String(a.workOrder || "").trim() === String(p.workOrder || "").trim();
+				if (!a.workOrder || !p.workOrder) return false;
+
+				const samePart = String(a.partNumber || "").trim() === String(p.partNumber || "").trim();
+
+				// Relaxing mismatch criteria:
+				// We skip OpNumber check as it causes false negatives due to data format differences (string vs number vs array).
+				// Matching strictly on WorkOrder + PartNumber is usually sufficient for consumption logic.
+				return sameWO && samePart;
+			});
+
+			if (matchIndex !== -1) {
+				// Found a match! This planned item is "completed" by actualsPool[matchIndex].
+				// Remove the actual from pool so it doesn't match another planned item (one-to-one).
+				actualsPool.splice(matchIndex, 1);
+				return false; // Hide this planned item
+			}
+
+			return true; // Keep this planned item (not completed yet)
+		});
+
+		return [...actuals, ...filteredPlanned];
 	}, [sourceOrders]);
 
 	const machineOptions = useMemo(() => {

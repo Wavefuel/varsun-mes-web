@@ -11,6 +11,7 @@ export default function TestErpPage() {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
+	const testDate = "2026-02-06";
 	const handleTest = async () => {
 		setLoading(true);
 		setError(null);
@@ -18,8 +19,7 @@ export default function TestErpPage() {
 
 		try {
 			// using a hardcoded valid date from the user's previous example or today
-			const testDate = "2026-01-22";
-			const result = await fetchErpSchedule(testDate, "D");
+			const result = await fetchErpSchedule(testDate, "G");
 			setData(result);
 			toast.success("ERP Data fetched successfully!");
 		} catch (err: any) {
@@ -39,7 +39,7 @@ export default function TestErpPage() {
 				<div className="bg-white p-6 rounded-2xl shadow-sm border border-card-border">
 					<h2 className="text-lg font-bold text-primary mb-2">Test ERP Connection</h2>
 					<p className="text-sm text-gray-500 mb-6">
-						Click the button below to trigger the server-side login flow and fetch schedule data for <b>2026-01-22</b>.
+						Click the button below to trigger the server-side login flow and fetch schedule data for <b>{testDate}</b>.
 					</p>
 
 					<button
