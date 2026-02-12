@@ -43,7 +43,7 @@ const loggerOptions: any = {
 		trace: { severity: 4, transport: true },
 	},
 	elastic: esTransportOpts,
-	disableFileTransport: env.LOG_FILE_TRANSPORT === "false",
+	disableFileTransport: false,
 };
 
 // Initiate internal logger from wavefuel-utils
