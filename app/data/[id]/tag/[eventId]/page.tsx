@@ -76,15 +76,13 @@ export default function EventGroupingPage() {
 	const eventId = params?.eventId && typeof params.eventId === "string" ? decodeURIComponent(params.eventId) : "unknown";
 
 	const { currentDate, eventsDevices, setEventsDevices, currentShift } = useData();
-	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID ?? "";
 
 	// Fetch devices if not present
 	useEffect(() => {
-		if (!lhtClusterId) return;
 		if (eventsDevices.length > 0) return;
 
-		fetchDeviceList({ clusterId: lhtClusterId }).then(setEventsDevices).catch(console.error);
-	}, [lhtClusterId, eventsDevices.length, setEventsDevices]);
+		fetchDeviceList({}).then(setEventsDevices).catch(console.error);
+	}, [eventsDevices.length, setEventsDevices]);
 
 	const machineName = React.useMemo(() => {
 		const device = eventsDevices.find((d) => d.id === machineId);
@@ -107,12 +105,11 @@ export default function EventGroupingPage() {
 		const loadEvent = async () => {
 			try {
 				setLoading(true);
-				if (!lhtClusterId) throw new Error("Cluster ID is not configured.");
+				// if (!lhtClusterId) throw new Error("Cluster ID is not configured.");
 				if (!machineId || machineId === "Unknown Machine") throw new Error("Invalid machine ID");
 				const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate, currentShift);
 				const periods = await fetchDeviceStatusPeriods({
 					deviceId: machineId,
-					clusterId: lhtClusterId,
 					query: {
 						fromDate: fromDateUTC.toISOString(),
 						toDate: toDateUTC.toISOString(),
@@ -123,7 +120,6 @@ export default function EventGroupingPage() {
 				const account = {};
 				const groups = await readDeviceStateEventGroupsWithItems({
 					deviceId: machineId,
-					clusterId: lhtClusterId,
 					account,
 					query: {
 						rangeStart: fromDateUTC.toISOString(),
@@ -207,10 +203,10 @@ export default function EventGroupingPage() {
 			}
 		};
 
-		if (machineId && lhtClusterId) {
+		if (machineId) {
 			loadEvent();
 		}
-	}, [eventId, machineId, lhtClusterId, currentDate, currentShift]);
+	}, [eventId, machineId, currentDate, currentShift]);
 
 	// Handlers
 	const handleAddMetadata = () => {
@@ -234,7 +230,6 @@ export default function EventGroupingPage() {
 		if (isSaving) return;
 		setIsSaving(true);
 		try {
-			if (!lhtClusterId) throw new Error("Cluster ID is not configured.");
 			if (!machineId || machineId === "Unknown Machine") throw new Error("Invalid machine ID");
 			if (!reason) throw new Error("Please select a reason code.");
 			if (!eventData?.rawStartTime || !eventData?.rawEndTime) throw new Error("Missing event time range.");
@@ -252,7 +247,6 @@ export default function EventGroupingPage() {
 
 			const existingGroups = await readDeviceStateEventGroupsWithItems({
 				deviceId: machineId,
-				clusterId: lhtClusterId,
 				account,
 				query: {
 					rangeStart: fromDateUTC.toISOString(),
@@ -291,7 +285,6 @@ export default function EventGroupingPage() {
 				if (eventData.itemId) {
 					const updated = await updateDeviceStateEventGroupItems({
 						deviceId: machineId,
-						clusterId: lhtClusterId,
 						groupId: matchingGroup.id,
 						account,
 						items: [
@@ -310,7 +303,6 @@ export default function EventGroupingPage() {
 				} else {
 					const created = await createDeviceStateEventGroupItems({
 						deviceId: machineId,
-						clusterId: lhtClusterId,
 						groupId: matchingGroup.id,
 						account,
 						items: [itemPayload],
@@ -320,7 +312,6 @@ export default function EventGroupingPage() {
 			} else {
 				const created = await createDeviceStateEventGroup({
 					deviceId: machineId,
-					clusterId: lhtClusterId,
 					account,
 					body: {
 						rangeStart: fromDateUTC.toISOString(),
@@ -378,7 +369,7 @@ export default function EventGroupingPage() {
 		}
 	};
 
-	const isDeviceMapLoaded = !lhtClusterId || eventsDevices.length > 0;
+	const isDeviceMapLoaded = eventsDevices.length > 0;
 
 	// Removed early return for isError to preserve header
 

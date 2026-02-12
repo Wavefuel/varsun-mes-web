@@ -83,11 +83,7 @@ export default function PlanningPage() {
 	const [isError, setIsError] = useState(false);
 	const deviceFetchRef = React.useRef(false);
 
-	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID;
-	const lhtAccountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID;
-	const lhtApplicationId = process.env.NEXT_PUBLIC_APPLICATION_ID;
-
-	const lighthouseEnabled = Boolean(lhtClusterId && lhtAccountId && lhtApplicationId);
+	const lighthouseEnabled = true; // Always attempt server fallback for cluster ID
 
 	const deviceLabel = (device?: DeviceSummary) => device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
 
@@ -132,20 +128,23 @@ export default function PlanningPage() {
 
 	useEffect(() => {
 		if (!lighthouseEnabled) return;
-		if (!lhtClusterId) return;
+		// if (!lhtClusterId) return; // Allow empty cluster ID
 		// If we already have devices in context, don't refetch
 		if (globalDevices.length) return;
 		if (deviceFetchRef.current) return;
 		deviceFetchRef.current = true;
 
-		fetchDeviceList({ clusterId: lhtClusterId })
+		deviceFetchRef.current = true;
+		// If clusterId is empty, server action will use env fallback
+		// If clusterId is empty, server action will use env fallback
+		fetchDeviceList({})
 			.then((result) => setGlobalDevices(result))
 			.catch((error) => {
 				console.error(error);
 				toast.error("Failed to load orders");
 				setIsError(true);
 			});
-	}, [globalDevices.length, lighthouseEnabled, lhtClusterId, setGlobalDevices]);
+	}, [globalDevices.length, lighthouseEnabled, setGlobalDevices]);
 
 	// Reset error when date changes
 	useEffect(() => {
@@ -153,7 +152,7 @@ export default function PlanningPage() {
 	}, [currentDate]);
 
 	useEffect(() => {
-		if (!lighthouseEnabled || !lhtClusterId || !lhtAccountId) {
+		if (!lighthouseEnabled) {
 			// Only clear if we really need to, but keeping it persistent is better.
 			return;
 		}
@@ -180,12 +179,7 @@ export default function PlanningPage() {
 		let cancelled = false;
 
 		readDeviceStateEventGroupsWithItemsByCluster({
-			clusterId: lhtClusterId,
-			applicationId: lhtApplicationId,
-			account: { id: lhtAccountId },
 			query: { rangeStart: start, rangeEnd: end },
-			// Fetch ALL devices now, filter locally if needed.
-			deviceId: undefined,
 		})
 			.then((groupsUnknown: unknown) => {
 				if (cancelled) return;
@@ -269,21 +263,7 @@ export default function PlanningPage() {
 		return () => {
 			cancelled = true;
 		};
-	}, [
-		isError,
-		currentDate,
-		globalDevices,
-		lighthouseEnabled,
-		lhtAccountId,
-		lhtApplicationId,
-		lhtClusterId,
-		selectedDeviceId,
-		globalAssignments,
-		setGlobalAssignments,
-		globalDataDate,
-		setGlobalDataDate,
-		currentShift,
-	]);
+	}, [isError, currentDate, globalDevices, lighthouseEnabled, setGlobalDataDate, currentShift]);
 
 	const sourceAssignments: Assignment[] = useMemo(() => {
 		if (lighthouseEnabled) return globalAssignments ?? [];
@@ -340,9 +320,6 @@ export default function PlanningPage() {
 
 				if (itemsToDelete.length > 0) {
 					await deleteDeviceStateEventGroupItemsManyByCluster({
-						clusterId: lhtClusterId!,
-						applicationId: lhtApplicationId!,
-						account: { id: lhtAccountId! },
 						items: itemsToDelete,
 					});
 				}

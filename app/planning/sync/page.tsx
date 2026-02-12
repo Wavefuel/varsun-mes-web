@@ -45,10 +45,6 @@ export default function PlanningSyncPage() {
 	const [activeTab, setActiveTab] = useState<TabType>("ALL");
 	const [searchQuery, setSearchQuery] = useState("");
 
-	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID;
-	const lhtAccountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID;
-	const lhtApplicationId = process.env.NEXT_PUBLIC_APPLICATION_ID;
-
 	// Run analysis on mount
 	useEffect(() => {
 		if (!globalDevices.length) return; // Wait for context
@@ -58,11 +54,6 @@ export default function PlanningSyncPage() {
 	const analyzeSync = async () => {
 		setIsLoading(true);
 		try {
-			if (!lhtClusterId || !lhtAccountId || !lhtApplicationId) {
-				toast.error("Lighthouse configuration missing");
-				return;
-			}
-
 			// Map shift to ERP code: Day=D, General=G, Night=E
 			const erpShiftCode = currentShift === "Night" ? "E" : currentShift === "General" ? "G" : "D";
 			const erpData = await fetchErpSchedule(currentDate, erpShiftCode);
@@ -368,9 +359,6 @@ export default function PlanningSyncPage() {
 			// Execute single sync call for all devices
 			if (Object.keys(syncBody).length > 0) {
 				await syncDeviceStateEventGroups({
-					clusterId: lhtClusterId!,
-					applicationId: lhtApplicationId!,
-					account: { id: lhtAccountId! },
 					body: syncBody,
 				});
 			}

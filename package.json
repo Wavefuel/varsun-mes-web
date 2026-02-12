@@ -3,24 +3,29 @@
 	"version": "0.1.0",
 	"private": true,
 	"scripts": {
-		"dev": "next dev -p 3002 --webpack",
+		"dev": "NODE_OPTIONS='--require=./apm-preloader.js' next dev -p 3002 --webpack",
 		"build": "next build --webpack",
-		"start": "next start -p 3002",
+		"start": "NODE_OPTIONS='--require=./apm-preloader.js' next start -p 3002",
 		"lint": "eslint"
 	},
 	"dependencies": {
 		"@ducanh2912/next-pwa": "^10.2.9",
+		"@elastic/elasticsearch": "^9.3.1",
 		"@types/react-datepicker": "^6.2.0",
 		"axios": "^1.13.2",
 		"clsx": "^2.1.1",
 		"date-fns": "^4.1.0",
+		"elastic-apm-node": "^4.15.0",
 		"lucide-react": "^0.562.0",
 		"next": "16.1.2",
 		"react": "19.2.3",
 		"react-datepicker": "^9.1.0",
 		"react-dom": "19.2.3",
+		"server-only": "^0.0.1",
 		"sonner": "^2.0.7",
-		"tailwind-merge": "^3.4.0"
+		"tailwind-merge": "^3.4.0",
+		"wavefuel-utils": "^1.1.19",
+		"zod": "^4.3.6"
 	},
 	"devDependencies": {
 		"@tailwindcss/postcss": "^4",

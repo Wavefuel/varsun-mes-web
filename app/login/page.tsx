@@ -4,6 +4,7 @@ import React, { useState } from "react";
 import { useRouter } from "next/navigation";
 import { toast } from "sonner";
 import { STORAGE_KEY } from "@/components/AuthGuard";
+import { login } from "@/app/actions/auth";
 
 export default function LoginPage() {
 	const router = useRouter();
@@ -29,12 +30,15 @@ export default function LoginPage() {
 			return;
 		}
 
-		const configEmail = process.env.NEXT_PUBLIC_LHT_ACCOUNT_EMAIL;
-		const configPassword = process.env.NEXT_PUBLIC_LHT_ACCOUNT_PASSWORD;
-
 		// Simulate a slight delay for realism
-		setTimeout(() => {
-			if (email === configEmail && password === configPassword) {
+		setTimeout(async () => {
+			const formData = new FormData();
+			formData.append("email", email);
+			formData.append("password", password);
+
+			const result = await login(formData);
+
+			if (result.success) {
 				localStorage.setItem(STORAGE_KEY, Date.now().toString());
 				toast.success("Welcome back!");
 				router.push("/");

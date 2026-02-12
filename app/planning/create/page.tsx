@@ -19,7 +19,7 @@ import {
 	type DeviceSummary,
 	type UpdateDeviceStateEventGroupData,
 } from "@/utils/scripts";
-import { getShiftDisplayName, buildUtcRangeFromIstDate, SHIFT_CONFIG } from "@/utils/shiftUtils";
+import { getShiftDisplayName, buildUtcRangeFromIstDate, SHIFT_CONFIG, type ShiftDisplayName } from "@/utils/shiftUtils";
 
 function AssignmentForm() {
 	const router = useRouter();
@@ -45,10 +45,6 @@ function AssignmentForm() {
 	const isEditMode = Boolean(orderId);
 	const queryDeviceId = searchParams.get("deviceId") ?? "";
 	const queryDate = searchParams.get("date") ?? "";
-
-	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID ?? "";
-	const lhtAccountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID ?? "";
-	const lhtApplicationId = process.env.NEXT_PUBLIC_APPLICATION_ID ?? "";
 
 	const [devices, setDevices] = useState<DeviceSummary[]>(globalDevices);
 	const [selectedDeviceId, setSelectedDeviceId] = useState<string>("");
@@ -187,10 +183,6 @@ function AssignmentForm() {
 	useEffect(() => {
 		let cancelled = false;
 		const loadData = async () => {
-			if (!lhtClusterId || !lhtAccountId || !lhtApplicationId) {
-				return;
-			}
-
 			setIsLoading(true);
 
 			try {
@@ -214,7 +206,7 @@ function AssignmentForm() {
 				// 1. Fetch Devices (Always needed)
 				let deviceList = devices;
 				if (deviceList.length === 0) {
-					deviceList = await fetchDeviceList({ clusterId: lhtClusterId });
+					deviceList = await fetchDeviceList({});
 					if (cancelled) return;
 					setDevices(deviceList);
 					setGlobalDevices(deviceList);
@@ -228,9 +220,6 @@ function AssignmentForm() {
 					const endRange = toDateUTC.toISOString();
 
 					const groupsUnknown = await readDeviceStateEventGroupsWithItemsByCluster({
-						clusterId: lhtClusterId,
-						applicationId: lhtApplicationId,
-						account: { id: lhtAccountId },
 						query: { rangeStart: startRange, rangeEnd: endRange },
 						deviceId: undefined,
 					});
@@ -316,7 +305,7 @@ function AssignmentForm() {
 					setMachine(cached.machine);
 					setOperator(cached.operator);
 					setDate(cached.date);
-					setShift(cached.shift);
+					setShift(cached.shift as ShiftDisplayName);
 					setStartTime(cached.startTime);
 					setEndTime(cached.endTime);
 					setCode(cached.code);
@@ -347,7 +336,7 @@ function AssignmentForm() {
 					setMachine(legacyExisting.machine);
 					setOperator(legacyExisting.operator);
 					setDate(legacyExisting.date);
-					setShift(legacyExisting.shift);
+					setShift(legacyExisting.shift as ShiftDisplayName);
 					setStartTime(legacyExisting.startTime);
 					setEndTime(legacyExisting.endTime);
 					setCode(legacyExisting.code || "");
@@ -377,9 +366,6 @@ function AssignmentForm() {
 				const endRange = toFallback.toISOString();
 
 				const groupsUnknownFallback = await readDeviceStateEventGroupsWithItemsByCluster({
-					clusterId: lhtClusterId,
-					applicationId: lhtApplicationId,
-					account: { id: lhtAccountId },
 					query: { rangeStart: startRange, rangeEnd: endRange },
 					deviceId: queryDeviceId && queryDeviceId !== "ALL" ? queryDeviceId : undefined,
 				});
@@ -463,9 +449,6 @@ function AssignmentForm() {
 		// NOT date or devices state, preventing loops.
 		isEditMode,
 		orderId,
-		lhtClusterId,
-		lhtAccountId,
-		lhtApplicationId,
 		queryDeviceId,
 		// queryDate might change, so we include it.
 		// If user navigates to same page with different date content, we should reload.
@@ -545,7 +528,7 @@ function AssignmentForm() {
 
 		// If invalid, try auto-switching shift (unless Custom)
 		if (!result.valid && !/custom/i.test(shift)) {
-			const shifts = ["Day Shift (S1)", "General Shift (S3)", "Night Shift (S2)"];
+			const shifts: ShiftDisplayName[] = ["Day Shift (S1)", "General Shift (S3)", "Night Shift (S2)"];
 			const currentIndex = shifts.findIndex((s) => s === shift);
 			const otherShifts = shifts.filter((_, i) => i !== currentIndex);
 
@@ -623,7 +606,7 @@ function AssignmentForm() {
 		let lhtItemId: string | undefined;
 
 		// Lighthouse write (optional; app can still work in local-only mode).
-		if (lhtClusterId && lhtAccountId && lhtApplicationId) {
+		if (true) {
 			if (!selectedDeviceId) {
 				toast.error("Please select a device");
 				setIsSaving(false);
@@ -642,10 +625,7 @@ function AssignmentForm() {
 
 					const payload: UpdateDeviceStateEventGroupData = {
 						deviceId: selectedDeviceId,
-						clusterId: lhtClusterId,
 						groupId: resolvedGroupId,
-						applicationId: lhtApplicationId,
-						account: { id: lhtAccountId },
 						body: {
 							group: {
 								rangeStart: groupRange.start,
@@ -685,9 +665,6 @@ function AssignmentForm() {
 
 					if (!existingGroupId) {
 						const groupsUnknown = await readDeviceStateEventGroupsWithItemsByCluster({
-							clusterId: lhtClusterId,
-							applicationId: lhtApplicationId,
-							account: { id: lhtAccountId },
 							query: { rangeStart: groupRange.start, rangeEnd: groupRange.end },
 							deviceId: selectedDeviceId,
 						});
@@ -714,10 +691,7 @@ function AssignmentForm() {
 					if (existingGroupId) {
 						const updatedGroup = await createDeviceStateEventGroupItems({
 							deviceId: selectedDeviceId,
-							clusterId: lhtClusterId,
-							applicationId: lhtApplicationId,
 							groupId: existingGroupId,
-							account: { id: lhtAccountId },
 							items: [
 								{
 									segmentStart: itemSegment.start,
@@ -738,9 +712,6 @@ function AssignmentForm() {
 					} else {
 						const created = await createDeviceStateEventGroup({
 							deviceId: selectedDeviceId,
-							clusterId: lhtClusterId,
-							applicationId: lhtApplicationId,
-							account: { id: lhtAccountId },
 							body: {
 								// Shift-wise group range (not full day)
 								rangeStart: groupRange.start,
@@ -882,7 +853,7 @@ function AssignmentForm() {
 					setDate(value as string);
 					break;
 				case "shift":
-					setShift(value as string);
+					setShift(value as ShiftDisplayName);
 					break;
 				case "startTime":
 					setStartTime(value as string);

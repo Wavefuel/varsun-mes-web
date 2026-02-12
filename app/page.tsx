@@ -47,11 +47,6 @@ export default function Home() {
 		setDeviceCount,
 	} = useData();
 
-	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID;
-	const lhtAccountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID;
-	const lhtApplicationId = process.env.NEXT_PUBLIC_APPLICATION_ID;
-	const lighthouseEnabled = Boolean(lhtClusterId && lhtAccountId && lhtApplicationId);
-
 	const [isError, setIsError] = React.useState(false);
 	const [isLoading, setIsLoading] = React.useState(false);
 	const deviceFetchRef = React.useRef(false);
@@ -63,31 +58,28 @@ export default function Home() {
 
 	// Fetch Devices if needed
 	React.useEffect(() => {
-		if (!lighthouseEnabled || !lhtClusterId) return;
 		if (globalDevices.length) return;
 		if (deviceFetchRef.current) return;
 		deviceFetchRef.current = true;
 
-		fetchDeviceList({ clusterId: lhtClusterId })
+		fetchDeviceList({ clusterId: "" })
 			.then((result) => setGlobalDevices(result))
 			.catch((error) => {
 				console.error(error);
 				setIsError(true);
 			});
-	}, [globalDevices.length, lighthouseEnabled, lhtClusterId, setGlobalDevices]);
+	}, [globalDevices.length, setGlobalDevices]);
 
 	// Fetch Total Device Count if needed
 	React.useEffect(() => {
-		if (!lighthouseEnabled || !lhtClusterId) return;
 		if (deviceCount !== null) return;
 
-		fetchDeviceCount({ clusterId: lhtClusterId }).then(setDeviceCount).catch(console.error);
-	}, [deviceCount, lighthouseEnabled, lhtClusterId, setDeviceCount]);
+		fetchDeviceCount({ clusterId: "", applicationId: "" }).then(setDeviceCount).catch(console.error);
+	}, [deviceCount, setDeviceCount]);
 
 	// Fetch Assignments if needed
 	React.useEffect(() => {
-		if (!lighthouseEnabled || !lhtClusterId || !lhtAccountId) return;
-		if (lighthouseEnabled && !globalDevices.length) return;
+		if (!globalDevices.length) return;
 		if (globalDataDate === `${currentDate}:${currentShift}` && globalAssignments) {
 			setIsLoading(false);
 			return;
@@ -112,9 +104,6 @@ export default function Home() {
 		let cancelled = false;
 
 		readDeviceStateEventGroupsWithItemsByCluster({
-			clusterId: lhtClusterId,
-			applicationId: lhtApplicationId,
-			account: { id: lhtAccountId },
 			query: { rangeStart: startRange, rangeEnd: endRange },
 		})
 			.then((groupsUnknown: unknown) => {
@@ -197,23 +186,11 @@ export default function Home() {
 		return () => {
 			cancelled = true;
 		};
-	}, [
-		currentDate,
-		globalDevices,
-		lighthouseEnabled,
-		lhtAccountId,
-		lhtApplicationId,
-		lhtClusterId,
-		globalAssignments,
-		setGlobalAssignments,
-		setGlobalDataDate,
-		globalDataDate,
-		currentShift,
-	]);
+	}, [currentDate, globalDevices, globalAssignments, setGlobalAssignments, setGlobalDataDate, globalDataDate, currentShift]);
 
 	// Metrics Logic
 	// Use globalAssignments if available (and we are in lighthouse mode), otherwise local orders
-	const sourceOrders = lighthouseEnabled ? ((globalAssignments as any[]) ?? []) : orders;
+	const sourceOrders = ((globalAssignments as any[]) ?? []) || orders;
 
 	// Filter all orders by the global currentDate and currentShift
 	const todaysOrders = sourceOrders.filter((o) => o.date === currentDate && (String(o.shift).includes(currentShift) || o.shift === currentShift));
@@ -338,7 +315,7 @@ export default function Home() {
 		);
 	}
 
-	if (isLoading || (lighthouseEnabled && globalAssignments === null)) {
+	if (isLoading || globalAssignments === null) {
 		return (
 			<div className="flex flex-col min-h-screen bg-background-dashboard items-center justify-center">
 				<Loader />

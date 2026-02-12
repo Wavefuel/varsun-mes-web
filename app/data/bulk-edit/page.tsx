@@ -114,7 +114,6 @@ const normalizeIso = (value?: string | Date | null) => {
 export default function BulkEditPage() {
 	const router = useRouter();
 	const { eventsDevices, setEventsDevices } = useData();
-	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID ?? "";
 
 	// -- State: Wizard Step --
 	const [step, setStep] = useState<1 | 2 | 3>(1);
@@ -146,9 +145,10 @@ export default function BulkEditPage() {
 
 	// -- Load Devices --
 	useEffect(() => {
-		if (!lhtClusterId || eventsDevices.length > 0) return;
-		fetchDeviceList({ clusterId: lhtClusterId }).then(setEventsDevices).catch(console.error);
-	}, [lhtClusterId, eventsDevices.length, setEventsDevices]);
+		if (eventsDevices.length > 0) return;
+		// If clusterId is empty, server action will use env fallback
+		fetchDeviceList({}).then(setEventsDevices).catch(console.error);
+	}, [eventsDevices.length, setEventsDevices]);
 
 	// -- Handlers --
 
@@ -169,10 +169,10 @@ export default function BulkEditPage() {
 	};
 
 	const fetchEvents = async () => {
-		if (!lhtClusterId) {
-			toast.error("Cluster ID not configured");
-			return;
-		}
+		// if (!lhtClusterId) {
+		// 	toast.error("Cluster ID not configured");
+		// 	return;
+		// }
 		if (selectedDeviceIds.length === 0) {
 			toast.error("Please select at least one device");
 			return;
@@ -253,7 +253,6 @@ export default function BulkEditPage() {
 
 			// Use batch read API - single call for all devices!
 			const result = await batchReadDeviceStateEvents({
-				clusterId: lhtClusterId,
 				body: {
 					deviceIds: selectedDeviceIds,
 					startDate,
@@ -554,8 +553,7 @@ export default function BulkEditPage() {
 			// Execute single sync call for all operations
 			if (Object.keys(syncBody).length > 0) {
 				await syncDeviceStateEventGroups({
-					clusterId: lhtClusterId,
-					account,
+					// account, // Rely on server fallback
 					body: syncBody,
 				});
 			}

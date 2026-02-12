@@ -69,23 +69,20 @@ export default function EventsPage() {
 	const [isLoading, setIsLoading] = useState(false);
 	const [isError, setIsError] = useState(false);
 
-	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID ?? "";
-
 	React.useEffect(() => {
-		if (!lhtClusterId) return;
 		if (eventsDevices.length > 0) return;
 
 		if (isError) return;
 
 		setIsLoading(true);
-		fetchDeviceList({ clusterId: lhtClusterId })
+		fetchDeviceList({})
 			.then(setEventsDevices)
 			.catch((e) => {
 				console.error(e);
 				setIsError(true);
 			})
 			.finally(() => setIsLoading(false));
-	}, [lhtClusterId, eventsDevices.length, setEventsDevices, isError]);
+	}, [eventsDevices.length, setEventsDevices, isError]);
 
 	const filteredMachines = eventsDevices.filter((m) => {
 		const query = searchQuery.toLowerCase();

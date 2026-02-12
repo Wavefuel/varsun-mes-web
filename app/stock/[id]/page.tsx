@@ -53,10 +53,7 @@ function StockEntryForm() {
 
 	const { addOrder, getOrderById, updateOrder, globalDevices, setGlobalDevices, globalAssignments, setGlobalAssignments, currentShift } = useData();
 
-	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID ?? "";
-	const lhtAccountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID ?? "";
-	const lhtApplicationId = process.env.NEXT_PUBLIC_APPLICATION_ID ?? "";
-	const lighthouseEnabled = Boolean(lhtClusterId && lhtAccountId && lhtApplicationId);
+	const lighthouseEnabled = true; // Boolean(lhtClusterId && lhtAccountId && lhtApplicationId);
 
 	// 1. Try finding in loaded globalAssignments context first (Live Data)
 	const cachedOrder = globalAssignments?.find((o) => o.id === orderId || o.lhtGroupId === orderId);
@@ -195,7 +192,7 @@ function StockEntryForm() {
 				// 1. Fetch Devices (if not cached)
 				let deviceList = devices;
 				if (deviceList.length === 0) {
-					deviceList = await fetchDeviceList({ clusterId: lhtClusterId });
+					deviceList = await fetchDeviceList({});
 					if (cancelled) return;
 					setDevices(deviceList);
 					setGlobalDevices(deviceList);
@@ -259,9 +256,6 @@ function StockEntryForm() {
 				}
 
 				const groupsUnknown = await readDeviceStateEventGroupsWithItemsByCluster({
-					clusterId: lhtClusterId,
-					applicationId: lhtApplicationId,
-					account: { id: lhtAccountId },
 					query: { rangeStart: range.rangeStart, rangeEnd: range.rangeEnd },
 					deviceId: queryDeviceId && queryDeviceId !== "ALL" ? queryDeviceId : undefined,
 				});
@@ -391,9 +385,6 @@ function StockEntryForm() {
 		// Ignoring function identities (addOrder, router) to prevent double-fetch.
 		orderId,
 		lighthouseEnabled,
-		lhtClusterId,
-		lhtAccountId,
-		lhtApplicationId,
 		queryDeviceId,
 		queryDate,
 		// eslint-disable-next-line react-hooks/exhaustive-deps
@@ -497,9 +488,7 @@ function StockEntryForm() {
 					// PLANNED: Create a NEW group with category COMPLETED
 					const createdGroup = await createDeviceStateEventGroup({
 						deviceId: order.lhtDeviceId,
-						clusterId: lhtClusterId,
-						applicationId: lhtApplicationId,
-						account: { id: lhtAccountId },
+						account: {},
 						body: {
 							rangeStart: range?.rangeStart,
 							rangeEnd: range?.rangeEnd,
@@ -573,10 +562,8 @@ function StockEntryForm() {
 					const groupIdToUse = eventGroupId || order.lhtGroupId!;
 					await updateDeviceStateEventGroupItems({
 						deviceId: order.lhtDeviceId,
-						clusterId: lhtClusterId,
 						groupId: groupIdToUse,
-						applicationId: lhtApplicationId,
-						account: { id: lhtAccountId },
+						account: {},
 						items: [
 							{
 								id: eventItemId,

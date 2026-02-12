@@ -59,8 +59,9 @@ const formatDuration = (minutes: number) => {
 	return `${m}min`;
 };
 
+import { ShiftType } from "@/utils/shiftUtils";
 // Use centralized utility for consistency
-const buildUtcRangeFromIstDate = (dateStr: string, currentShift: "Day" | "Night" | "General") => {
+const buildUtcRangeFromIstDate = (dateStr: string, currentShift: ShiftType) => {
 	return buildUtcRangeUtil(dateStr, currentShift);
 };
 
@@ -110,25 +111,23 @@ export default function MachineTaggingPage() {
 	// decodeURIComponent in case ID has spaces or special chars
 	const machineId = typeof params.id === "string" ? decodeURIComponent(params.id) : "Unknown Machine";
 
-	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID ?? "";
-	const [isLoading, setIsLoading] = useState(!!lhtClusterId && eventsDevices.length === 0);
+	const [isLoading, setIsLoading] = useState(eventsDevices.length === 0);
 	const [isError, setIsError] = useState(false);
 
 	// Fetch devices if not present
 	React.useEffect(() => {
-		if (!lhtClusterId) return;
 		if (eventsDevices.length > 0) return;
 		if (isError) return;
 
 		setIsLoading(true);
-		fetchDeviceList({ clusterId: lhtClusterId })
+		fetchDeviceList({})
 			.then(setEventsDevices)
 			.catch((e) => {
 				console.error(e);
 				setIsError(true);
 			})
 			.finally(() => setIsLoading(false));
-	}, [lhtClusterId, eventsDevices.length, setEventsDevices, isError]);
+	}, [eventsDevices.length, setEventsDevices, isError]);
 
 	const machineName = React.useMemo(() => {
 		const device = eventsDevices.find((d) => d.id === machineId);
@@ -143,7 +142,6 @@ export default function MachineTaggingPage() {
 	const [loading, setLoading] = useState(true);
 	const [error, setError] = useState<string | null>(null);
 
-	const clusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID || "";
 	// Deduplication ref
 	const lastFetchParams = React.useRef<string>("");
 
@@ -195,15 +193,11 @@ export default function MachineTaggingPage() {
 				setLoading(true);
 				setError(null);
 
-				if (!clusterId) {
-					throw new Error("Cluster ID is not configured. Check NEXT_PUBLIC_LHT_CLUSTER_ID in .env");
-				}
-
 				if (!machineId || machineId === "Unknown Machine") {
 					throw new Error("Invalid machine ID");
 				}
 
-				console.log("Fetching status periods for:", { machineId, clusterId, currentDate });
+				console.log("Fetching status periods for:", { machineId, currentDate });
 
 				// Parse currentDate (YYYY-MM-DD format) and create UTC date range
 				// IST is UTC+5:30, so to get UTC time from IST, subtract 5.5 hours:
@@ -213,7 +207,6 @@ export default function MachineTaggingPage() {
 
 				const result = await fetchDeviceStatusPeriods({
 					deviceId: machineId,
-					clusterId,
 					query: {
 						fromDate: fromDateUTC.toISOString(),
 						toDate: toDateUTC.toISOString(),
@@ -224,7 +217,6 @@ export default function MachineTaggingPage() {
 				const account = {};
 				const groups = await readDeviceStateEventGroupsWithItems({
 					deviceId: machineId,
-					clusterId,
 					account,
 					query: {
 						rangeStart: fromDateUTC.toISOString(),
@@ -308,10 +300,10 @@ export default function MachineTaggingPage() {
 			}
 		};
 
-		if (machineId && clusterId) {
+		if (machineId) {
 			fetchPeriods();
 		}
-	}, [machineId, currentDate, clusterId, currentShift, isFutureDate]);
+	}, [machineId, currentDate, currentShift, isFutureDate]);
 
 	// Calculate stats from events
 	const stats = React.useMemo(() => {
@@ -503,7 +495,6 @@ export default function MachineTaggingPage() {
 									key={event.id}
 									event={event}
 									machineId={machineId}
-									clusterId={clusterId}
 									currentDate={currentDate}
 									currentShift={currentShift}
 									onReasonSaved={handleReasonSaved}
@@ -533,14 +524,12 @@ export default function MachineTaggingPage() {
 function EventCard({
 	event,
 	machineId,
-	clusterId,
 	currentDate,
 	currentShift,
 	onReasonSaved,
 }: {
 	event: DowntimeEvent;
 	machineId: string;
-	clusterId: string;
 	currentDate: string;
 	currentShift: string;
 	onReasonSaved: (eventId: string, updates: Record<string, unknown>) => void;
@@ -619,12 +608,11 @@ function EventCard({
 		if (isSaving) return;
 		setIsSaving(true);
 		try {
-			if (!clusterId) throw new Error("Cluster ID is not configured.");
 			if (!machineId || machineId === "Unknown Machine") throw new Error("Invalid machine ID");
 			if (!reason) throw new Error("Please select a reason code.");
 			if (!event.rawStartTime || !event.rawEndTime) throw new Error("Missing event time range.");
 
-			const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate, currentShift);
+			const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate, currentShift as ShiftType);
 			const account = {};
 			const category = getReasonCategory(reason);
 			const metadata = {
@@ -634,7 +622,6 @@ function EventCard({
 
 			const existingGroups = await readDeviceStateEventGroupsWithItems({
 				deviceId: machineId,
-				clusterId,
 				account,
 				query: {
 					rangeStart: fromDateUTC.toISOString(),
@@ -679,7 +666,6 @@ function EventCard({
 				if (event.itemId) {
 					const updated = await updateDeviceStateEventGroupItems({
 						deviceId: machineId,
-						clusterId,
 						groupId: matchingGroup.id,
 						account,
 						items: [
@@ -698,7 +684,6 @@ function EventCard({
 				} else {
 					const created = await createDeviceStateEventGroupItems({
 						deviceId: machineId,
-						clusterId,
 						groupId: matchingGroup.id,
 						account,
 						items: [itemPayload],
@@ -708,7 +693,6 @@ function EventCard({
 			} else {
 				const created = await createDeviceStateEventGroup({
 					deviceId: machineId,
-					clusterId,
 					account,
 					body: {
 						rangeStart: fromDateUTC.toISOString(),

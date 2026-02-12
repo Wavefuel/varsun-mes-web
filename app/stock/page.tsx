@@ -42,10 +42,7 @@ export default function StockPage() {
 	const [isError, setIsError] = useState(false);
 	const deviceFetchRef = React.useRef(false);
 
-	const lhtClusterId = process.env.NEXT_PUBLIC_LHT_CLUSTER_ID;
-	const lhtAccountId = process.env.NEXT_PUBLIC_LHT_ACCOUNT_ID;
-	const lhtApplicationId = process.env.NEXT_PUBLIC_APPLICATION_ID;
-	const lighthouseEnabled = Boolean(lhtClusterId && lhtAccountId && lhtApplicationId);
+	const lighthouseEnabled = true; // Boolean(lhtClusterId && lhtAccountId && lhtApplicationId);
 
 	const deviceLabel = (device?: DeviceSummary) => device?.deviceName || device?.serialNumber || device?.foreignId || device?.id || "Unknown Device";
 
@@ -75,19 +72,19 @@ export default function StockPage() {
 	};
 
 	useEffect(() => {
-		if (!lighthouseEnabled || !lhtClusterId) return;
+		if (!lighthouseEnabled) return;
 		// If we already have devices in context, don't refetch
 		if (globalDevices.length) return;
 		if (deviceFetchRef.current) return;
 		deviceFetchRef.current = true;
 
-		fetchDeviceList({ clusterId: lhtClusterId })
+		fetchDeviceList({})
 			.then((result) => setGlobalDevices(result))
 			.catch((error) => {
 				console.error(error);
 				setIsError(true);
 			});
-	}, [globalDevices.length, lighthouseEnabled, lhtClusterId, setGlobalDevices]);
+	}, [globalDevices.length, lighthouseEnabled, setGlobalDevices]);
 
 	// Reset error when date changes
 	useEffect(() => {
@@ -95,7 +92,7 @@ export default function StockPage() {
 	}, [currentDate]);
 
 	useEffect(() => {
-		if (!lighthouseEnabled || !lhtClusterId || !lhtAccountId) return;
+		if (!lighthouseEnabled) return;
 
 		// Wait for devices to be loaded before fetching assignments to avoid ID flash
 		if (lighthouseEnabled && !globalDevices.length) {
@@ -117,9 +114,6 @@ export default function StockPage() {
 		const end = toDateUTC.toISOString();
 
 		readDeviceStateEventGroupsWithItemsByCluster({
-			clusterId: lhtClusterId,
-			applicationId: lhtApplicationId,
-			account: { id: lhtAccountId },
 			query: { rangeStart: start, rangeEnd: end },
 		})
 			.then((groupsUnknown: unknown) => {
@@ -211,9 +205,6 @@ export default function StockPage() {
 		currentDate,
 		globalDevices,
 		lighthouseEnabled,
-		lhtAccountId,
-		lhtApplicationId,
-		lhtClusterId,
 		globalAssignments,
 		setGlobalAssignments,
 		setGlobalDataDate,

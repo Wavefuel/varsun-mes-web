@@ -1,14 +1,17 @@
 "use server";
+import "server-only";
 
 import axios from "axios";
 import { cookies } from "next/headers";
+
+import { config } from "@/app/config";
 
 const BASE_URL = "http://varsunind.proverp.com/";
 const AUTH_URL = "identity/Account/Login";
 const API_URL = "ERP/WorkCenterSchedule/GetSchedules";
 
-const USER_ID = process.env.ERP_USER_ID || "apiuser";
-const PASSWORD = process.env.ERP_PASSWORD || "V@rsun@2026";
+const USER_ID = config.erp.userId || "apiuser";
+const PASSWORD = config.erp.password || "V@rsun@2026";
 
 interface ErpSession {
 	cookies: string[];
