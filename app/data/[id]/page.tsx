@@ -214,10 +214,8 @@ export default function MachineTaggingPage() {
 					},
 				});
 
-				const account = {};
 				const groups = await readDeviceStateEventGroupsWithItems({
 					deviceId: machineId,
-					account,
 					query: {
 						rangeStart: fromDateUTC.toISOString(),
 						rangeEnd: toDateUTC.toISOString(),
@@ -482,8 +480,8 @@ export default function MachineTaggingPage() {
 							</div>
 						) : error ? (
 							<div className="text-center py-12 flex flex-col items-center">
-								<span className="material-symbols-outlined text-[48px] text-red-300 mb-2">error</span>
-								<p className="text-sm font-bold text-red-400">{error}</p>
+								<span className="material-symbols-outlined text-[48px] text-gray-300 mb-2">error</span>
+								<p className="text-sm font-bold text-gray-500">{error}</p>
 							</div>
 						) : isFutureDate ? (
 							<div className="flex-1 flex flex-col items-center justify-center -mt-20">
@@ -613,7 +611,6 @@ function EventCard({
 			if (!event.rawStartTime || !event.rawEndTime) throw new Error("Missing event time range.");
 
 			const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate, currentShift as ShiftType);
-			const account = {};
 			const category = getReasonCategory(reason);
 			const metadata = {
 				reasonCode: Number(reason),
@@ -622,7 +619,6 @@ function EventCard({
 
 			const existingGroups = await readDeviceStateEventGroupsWithItems({
 				deviceId: machineId,
-				account,
 				query: {
 					rangeStart: fromDateUTC.toISOString(),
 					rangeEnd: toDateUTC.toISOString(),
@@ -667,7 +663,6 @@ function EventCard({
 					const updated = await updateDeviceStateEventGroupItems({
 						deviceId: machineId,
 						groupId: matchingGroup.id,
-						account,
 						items: [
 							{
 								id: event.itemId,
@@ -685,7 +680,6 @@ function EventCard({
 					const created = await createDeviceStateEventGroupItems({
 						deviceId: machineId,
 						groupId: matchingGroup.id,
-						account,
 						items: [itemPayload],
 					});
 					savedGroup = created;
@@ -693,7 +687,6 @@ function EventCard({
 			} else {
 				const created = await createDeviceStateEventGroup({
 					deviceId: machineId,
-					account,
 					body: {
 						rangeStart: fromDateUTC.toISOString(),
 						rangeEnd: toDateUTC.toISOString(),

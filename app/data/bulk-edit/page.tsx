@@ -467,7 +467,6 @@ export default function BulkEditPage() {
 		setUpdateProgress({ current: 0, total: selectedEventIds.size });
 
 		const eventsToUpdate = fetchedEvents.filter((e) => selectedEventIds.has(e.id));
-		const account = {};
 		const category = getReasonCategory(targetReason);
 		const reasonDescription = getReasonDescription(targetReason);
 

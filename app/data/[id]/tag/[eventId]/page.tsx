@@ -117,10 +117,8 @@ export default function EventGroupingPage() {
 					},
 				});
 
-				const account = {};
 				const groups = await readDeviceStateEventGroupsWithItems({
 					deviceId: machineId,
-					account,
 					query: {
 						rangeStart: fromDateUTC.toISOString(),
 						rangeEnd: toDateUTC.toISOString(),
@@ -235,7 +233,6 @@ export default function EventGroupingPage() {
 			if (!eventData?.rawStartTime || !eventData?.rawEndTime) throw new Error("Missing event time range.");
 
 			const { fromDateUTC, toDateUTC } = buildUtcRangeFromIstDate(currentDate, currentShift);
-			const account = {};
 			const category = getReasonCategory(reason);
 			const metadataObj = metadataFromArray(metadata);
 			const metadataPayload = {
@@ -244,10 +241,8 @@ export default function EventGroupingPage() {
 				reasonDescription: getReasonDescription(reason),
 				...(tagsText.trim() ? { Tags: tagsText.trim() } : {}),
 			};
-
 			const existingGroups = await readDeviceStateEventGroupsWithItems({
 				deviceId: machineId,
-				account,
 				query: {
 					rangeStart: fromDateUTC.toISOString(),
 					rangeEnd: toDateUTC.toISOString(),
@@ -286,7 +281,6 @@ export default function EventGroupingPage() {
 					const updated = await updateDeviceStateEventGroupItems({
 						deviceId: machineId,
 						groupId: matchingGroup.id,
-						account,
 						items: [
 							{
 								id: eventData.itemId,
@@ -304,7 +298,6 @@ export default function EventGroupingPage() {
 					const created = await createDeviceStateEventGroupItems({
 						deviceId: machineId,
 						groupId: matchingGroup.id,
-						account,
 						items: [itemPayload],
 					});
 					savedGroup = created;
@@ -312,7 +305,6 @@ export default function EventGroupingPage() {
 			} else {
 				const created = await createDeviceStateEventGroup({
 					deviceId: machineId,
-					account,
 					body: {
 						rangeStart: fromDateUTC.toISOString(),
 						rangeEnd: toDateUTC.toISOString(),

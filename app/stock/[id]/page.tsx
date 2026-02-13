@@ -488,7 +488,6 @@ function StockEntryForm() {
 					// PLANNED: Create a NEW group with category COMPLETED
 					const createdGroup = await createDeviceStateEventGroup({
 						deviceId: order.lhtDeviceId,
-						account: {},
 						body: {
 							rangeStart: range?.rangeStart,
 							rangeEnd: range?.rangeEnd,
@@ -563,7 +562,6 @@ function StockEntryForm() {
 					await updateDeviceStateEventGroupItems({
 						deviceId: order.lhtDeviceId,
 						groupId: groupIdToUse,
-						account: {},
 						items: [
 							{
 								id: eventItemId,
