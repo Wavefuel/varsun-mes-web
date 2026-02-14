@@ -108,7 +108,7 @@ export async function createDeviceStateEventGroup(data: CreateDeviceStateEventGr
 		if (!clusterId) {
 			throw new Error("Invalid Input, clusterId is required.");
 		}
-		const account: Account = data.account || { id: config.lighthouse.accountId };
+		const account: Account = { ...(data.account || {}), id: data.account?.id || config.lighthouse.accountId };
 		if (!account.id) {
 			throw new Error("Invalid Input, account (or env LHT_ACCOUNT_ID) is required.");
 		}
@@ -149,6 +149,9 @@ export async function createDeviceStateEventGroup(data: CreateDeviceStateEventGr
 		});
 
 		const applicationId = data.applicationId || config.lighthouse.applicationId;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
 		const deviceStateEventsUrl = `${clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
 		const rangeStartLabel = formatDateOnly(range.rangeStart);
 		const rangeEndLabel = formatDateOnly(range.rangeEnd);
@@ -185,7 +188,7 @@ export async function createDeviceStateEventGroupsManyByCluster(data: CreateDevi
 		if (!clusterId) {
 			throw new Error("Invalid Input, clusterId is required.");
 		}
-		const account: Account = data.account || { id: config.lighthouse.accountId };
+		const account: Account = { ...(data.account || {}), id: data.account?.id || config.lighthouse.accountId };
 		if (!account.id) {
 			throw new Error("Invalid Input, account (or env LHT_ACCOUNT_ID) is required.");
 		}
@@ -250,6 +253,9 @@ export async function createDeviceStateEventGroupsManyByCluster(data: CreateDevi
 		});
 
 		const applicationId = data.applicationId || config.lighthouse.applicationId;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
 		const url = `${clusterId}/device/${applicationId}/groups/create/many`;
 
 		const response = await lightHouseAPIHandler.post(
@@ -521,7 +527,7 @@ export async function updateDeviceStateEventGroup(data: UpdateDeviceStateEventGr
 		if (!data.groupId) {
 			throw new Error("Invalid Input, groupId is required.");
 		}
-		const account: Account = data.account || { id: config.lighthouse.accountId };
+		const account: Account = { ...(data.account || {}), id: data.account?.id || config.lighthouse.accountId };
 		if (!account.id) {
 			throw new Error("Invalid Input, account (or env LHT_ACCOUNT_ID) is required.");
 		}
@@ -530,6 +536,9 @@ export async function updateDeviceStateEventGroup(data: UpdateDeviceStateEventGr
 		}
 
 		const applicationId = data.applicationId || config.lighthouse.applicationId;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
 		const deviceStateEventsUrl = `${clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
 
 		const response = await lightHouseAPIHandler.patch(
@@ -569,7 +578,7 @@ export async function updateDeviceStateEventGroupsManyByCluster(data: UpdateDevi
 		if (!clusterId) {
 			throw new Error("Invalid Input, clusterId is required.");
 		}
-		const account: Account = data.account || { id: config.lighthouse.accountId };
+		const account: Account = { ...(data.account || {}), id: data.account?.id || config.lighthouse.accountId };
 		if (!account.id) {
 			throw new Error("Invalid Input, account (or env LHT_ACCOUNT_ID) is required.");
 		}
@@ -630,6 +639,9 @@ export async function updateDeviceStateEventGroupsManyByCluster(data: UpdateDevi
 		});
 
 		const applicationId = data.applicationId || config.lighthouse.applicationId;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
 		const url = `${clusterId}/device/${applicationId}/groups/update/many`;
 
 		const response = await lightHouseAPIHandler.patch(
@@ -672,13 +684,16 @@ export async function createDeviceStateEventGroupItems(data: CreateDeviceStateEv
 		const clusterId = data.clusterId || config.lighthouse.clusterId;
 		if (!clusterId) throw new Error("Invalid Input, clusterId is required.");
 		if (!data.groupId) throw new Error("Invalid Input, groupId is required.");
-		const account: Account = data.account || { id: config.lighthouse.accountId };
+		const account: Account = { ...(data.account || {}), id: data.account?.id || config.lighthouse.accountId };
 		if (!account.id) throw new Error("Invalid Input, account (or env LHT_ACCOUNT_ID) is required.");
 		if (!data.items || data.items.length === 0) {
 			throw new Error("Invalid Input, items array is required and cannot be empty.");
 		}
 
 		const applicationId = data.applicationId || config.lighthouse.applicationId;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
 		const deviceStateEventsUrl = `${clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
 
 		const response = await lightHouseAPIHandler.patch(
@@ -715,13 +730,16 @@ export async function updateDeviceStateEventGroupItems(data: UpdateDeviceStateEv
 		const clusterId = data.clusterId || config.lighthouse.clusterId;
 		if (!clusterId) throw new Error("Invalid Input, clusterId is required.");
 		if (!data.groupId) throw new Error("Invalid Input, groupId is required.");
-		const account: Account = data.account || { id: config.lighthouse.accountId };
+		const account: Account = { ...(data.account || {}), id: data.account?.id || config.lighthouse.accountId };
 		if (!account.id) throw new Error("Invalid Input, account (or env LHT_ACCOUNT_ID) is required.");
 		if (!data.items || data.items.length === 0) {
 			throw new Error("Invalid Input, items array is required and cannot be empty.");
 		}
 
 		const applicationId = data.applicationId || config.lighthouse.applicationId;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
 		const deviceStateEventsUrl = `${clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
 
 		const response = await lightHouseAPIHandler.patch(
@@ -758,13 +776,16 @@ export async function deleteDeviceStateEventGroupItems(data: DeleteDeviceStateEv
 		const clusterId = data.clusterId || config.lighthouse.clusterId;
 		if (!clusterId) throw new Error("Invalid Input, clusterId is required.");
 		if (!data.groupId) throw new Error("Invalid Input, groupId is required.");
-		const account: Account = data.account || { id: config.lighthouse.accountId };
+		const account: Account = { ...(data.account || {}), id: data.account?.id || config.lighthouse.accountId };
 		if (!account.id) throw new Error("Invalid Input, account (or env LHT_ACCOUNT_ID) is required.");
 		if (!data.itemIds || data.itemIds.length === 0) {
 			throw new Error("Invalid Input, itemIds array is required and cannot be empty.");
 		}
 
 		const applicationId = data.applicationId || config.lighthouse.applicationId;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
 		const deviceStateEventsUrl = `${clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
 
 		const response = await lightHouseAPIHandler.patch(
@@ -814,13 +835,16 @@ export async function deleteDeviceStateEventGroupItemsManyByCluster(data: Delete
 	try {
 		const clusterId = data.clusterId || config.lighthouse.clusterId;
 		if (!clusterId) throw new Error("Invalid Input, clusterId is required.");
-		const account: Account = data.account || { id: config.lighthouse.accountId };
+		const account: Account = { ...(data.account || {}), id: data.account?.id || config.lighthouse.accountId };
 		if (!account.id) throw new Error("Invalid Input, account (or env LHT_ACCOUNT_ID) is required.");
 		if (!data.items || data.items.length === 0) {
 			throw new Error("Invalid Input, items array is required and cannot be empty.");
 		}
 
 		const applicationId = data.applicationId || config.lighthouse.applicationId;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
 		// Use a cluster-level endpoint for bulk deletion across devices
 		const url = `${clusterId}/device/${applicationId}/groups/items/delete/many`;
 
@@ -871,12 +895,15 @@ export async function deleteDeviceStateEventGroup(data: DeleteDeviceStateEventGr
 		if (!data.groupId) {
 			throw new Error("Invalid Input, groupId is required.");
 		}
-		const account: Account = data.account || { id: config.lighthouse.accountId };
+		const account: Account = { ...(data.account || {}), id: data.account?.id || config.lighthouse.accountId };
 		if (!account.id) {
 			throw new Error("Invalid Input, account (or env LHT_ACCOUNT_ID) is required.");
 		}
 
 		const applicationId = data.applicationId || config.lighthouse.applicationId;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
 		const deviceStateEventsUrl = `${clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
 
 		const response = await lightHouseAPIHandler.delete(`${deviceStateEventsUrl}/groups/delete/one/${data.groupId}`, {
@@ -995,7 +1022,7 @@ export async function syncDeviceStateEventGroups(data: SyncDeviceStateEventGroup
 		if (!clusterId) {
 			throw new Error("Invalid Input, clusterId is required.");
 		}
-		const account: Account = data.account || { id: config.lighthouse.accountId };
+		const account: Account = { ...(data.account || {}), id: data.account?.id || config.lighthouse.accountId };
 		if (!account.id) {
 			throw new Error("Invalid Input, account (or env LHT_ACCOUNT_ID) is required.");
 		}
@@ -1004,6 +1031,9 @@ export async function syncDeviceStateEventGroups(data: SyncDeviceStateEventGroup
 		}
 
 		const applicationId = data.applicationId || config.lighthouse.applicationId;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
 		// Use cluster-level multi-device sync endpoint
 		// Base URL already includes /api/cluster/application, so we only need clusterId/state-events/applicationId
 		const url = `${clusterId}/state-events/${applicationId}/groups/sync`;
@@ -1117,7 +1147,7 @@ export async function readDeviceStateEventGroupsWithItems(data: ReadDeviceStateE
 		if (!clusterId) {
 			throw new Error("Invalid Input, clusterId is required.");
 		}
-		const account: Account = data.account || { id: config.lighthouse.accountId };
+		const account: Account = { ...(data.account || {}), id: data.account?.id || config.lighthouse.accountId };
 		if (!account.id) {
 			throw new Error("Invalid Input, account (or env LHT_ACCOUNT_ID) is required.");
 		}
@@ -1126,6 +1156,9 @@ export async function readDeviceStateEventGroupsWithItems(data: ReadDeviceStateE
 		}
 
 		const applicationId = data.applicationId || config.lighthouse.applicationId;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
 		const deviceStateEventsUrl = `${clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
 
 		const response = await lightHouseAPIHandler.get(`${deviceStateEventsUrl}/groups/read/many/with-items`, {
@@ -1161,7 +1194,7 @@ export async function readDeviceStateEventGroupsWithItemsByCluster(data: ReadDev
 		if (!clusterId) {
 			throw new Error("Invalid Input, clusterId is required.");
 		}
-		const account: Account = data.account || { id: config.lighthouse.accountId };
+		const account: Account = { ...(data.account || {}), id: data.account?.id || config.lighthouse.accountId };
 		if (!account.id) {
 			throw new Error("Invalid Input, account (or env LHT_ACCOUNT_ID) is required.");
 		}
@@ -1170,6 +1203,9 @@ export async function readDeviceStateEventGroupsWithItemsByCluster(data: ReadDev
 		}
 
 		const applicationId = data.applicationId || config.lighthouse.applicationId;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
 		const response = await lightHouseAPIHandler.get(`${clusterId}/device/${applicationId}/groups/read/many/with-items`, {
 			params: {
 				rangeStart: data.query.rangeStart,
@@ -1372,6 +1408,9 @@ export async function fetchDeviceStatusPeriods(data: FetchDeviceStatusPeriodsDat
 		}
 
 		const applicationId = data.applicationId || config.lighthouse.applicationId;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
 		const deviceStateEventsUrl = `${clusterId}/device/${applicationId}/state-events/${data.deviceId}`;
 
 		const response = await lightHouseAPIHandler.get(`${deviceStateEventsUrl}/status-periods`, {
@@ -1406,6 +1445,9 @@ export async function fetchDeviceStatusPeriodsManyByCluster(
 		}
 
 		const applicationId = data.applicationId || config.lighthouse.applicationId;
+		if (!applicationId) {
+			throw new Error("Invalid Input, APPLICATION_ID is required.");
+		}
 		const url = `${clusterId}/device/${applicationId}/status-periods/many`;
 
 		const response = await lightHouseAPIHandler.post(
