@@ -219,3 +219,57 @@
 .time-scroll-btn .material-symbols-outlined {
 	font-size: 14px !important;
 }
+
+.datetime-picker-popover {
+	background: white;
+	border-radius: 12px;
+	box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15);
+	border: 1px solid #f1f5f9;
+	display: flex;
+	overflow: hidden;
+	width: 100%;
+	max-width: calc(100vw - 16px);
+}
+
+.datetime-calendar-pane {
+	border-right: 1px solid #f1f5f9;
+}
+
+.datetime-calendar-pane .react-datepicker {
+	box-shadow: none !important;
+	border: 0 !important;
+	border-radius: 0 !important;
+}
+
+.datetime-time-pane {
+	background: #fff;
+	width: 136px;
+	flex: 0 0 136px;
+	align-self: flex-start;
+}
+
+.datetime-time-popover {
+	width: 136px !important;
+	height: auto;
+	min-height: 0;
+	border-radius: 0;
+	padding: 2px 4px 0;
+}
+
+.datetime-time-pane .time-picker-columns {
+	height: 120px;
+}
+
+.datetime-picker-compact .datetime-picker-popover {
+	flex-direction: column;
+}
+
+.datetime-picker-compact .datetime-calendar-pane {
+	border-right: 0;
+	border-bottom: 1px solid #f1f5f9;
+}
+
+.datetime-picker-compact .datetime-time-pane .time-picker-popover {
+	width: 100% !important;
+	max-width: 100% !important;
+}

@@ -11,7 +11,7 @@ export default function TestErpPage() {
 	const [loading, setLoading] = useState(false);
 	const [error, setError] = useState<string | null>(null);
 
-	const testDate = "2026-02-06";
+	const testDate = "2026-02-17";
 	const handleTest = async () => {
 		setLoading(true);
 		setError(null);
@@ -19,7 +19,7 @@ export default function TestErpPage() {
 
 		try {
 			// using a hardcoded valid date from the user's previous example or today
-			const result = await fetchErpSchedule(testDate, "G");
+			const result = await fetchErpSchedule(testDate, "E");
 			setData(result);
 			toast.success("ERP Data fetched successfully!");
 		} catch (err: any) {

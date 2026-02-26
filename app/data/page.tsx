@@ -11,20 +11,10 @@ import Loader from "@/components/Loader";
 import Select from "@/components/ui/Select";
 import { useData } from "@/context/DataContext";
 
-import { fetchDeviceList, type DeviceSummary } from "@/utils/scripts";
+import { fetchDeviceList } from "@/utils/scripts";
 
 function cn(...inputs: ClassValue[]) {
 	return twMerge(clsx(inputs));
-}
-
-// Helper for deterministic random numbers
-function getPseudoRandom(seed: string) {
-	let hash = 0;
-	for (let i = 0; i < seed.length; i++) {
-		hash = (hash << 5) - hash + seed.charCodeAt(i);
-		hash |= 0;
-	}
-	return Math.abs(hash);
 }
 
 // Helper to determine status colors
@@ -61,13 +51,14 @@ function getStatusStyles(status: string = "") {
 }
 
 export default function EventsPage() {
-	const { currentDate, eventsDevices, setEventsDevices, currentShift } = useData();
+	const { eventsDevices, setEventsDevices } = useData();
 	const [searchQuery, setSearchQuery] = useState("");
 	const [filterStatus, setFilterStatus] = useState("All");
 	const [filterConnection, setFilterConnection] = useState("All");
 	const [showFilters, setShowFilters] = useState(false);
 	const [isLoading, setIsLoading] = useState(false);
 	const [isError, setIsError] = useState(false);
+	const [isFabMenuOpen, setIsFabMenuOpen] = useState(false);
 
 	React.useEffect(() => {
 		if (eventsDevices.length > 0) return;
@@ -105,26 +96,6 @@ export default function EventsPage() {
 		const statuses = Array.from(new Set(eventsDevices.map((d) => d.connectionStatus || "N/A"))).sort();
 		return ["All", ...statuses];
 	}, [eventsDevices]);
-
-	// Helper to generate dynamic status based on machine + date + shift
-	const getMachineStatus = (machineId: string, date: string, shift: string) => {
-		const rand = getPseudoRandom(machineId + date + shift);
-		const untaggedCount = rand % 25; // 0 to 24
-
-		// Simulate different states based on random seed
-		const statusTypes = ["Running", "Idle", "Maintenance", "Offline"];
-		// Bias towards 'Running'
-		const statusIndex = rand % 10 > 6 ? rand % 4 : 0;
-		const status = statusTypes[statusIndex];
-
-		// Connection strength (1-3)
-		const connectionParams = {
-			signal: 80 + (rand % 20), // 80-99%
-			ping: 12 + (rand % 40), // 12-52ms
-		};
-
-		return { untaggedCount, status, ...connectionParams };
-	};
 
 	return (
 		<div className="flex flex-col min-h-screen bg-background-dashboard pb-24">
@@ -177,7 +148,8 @@ export default function EventsPage() {
 						</div>
 					</div>
 				)}
-			</div>
+
+				</div>
 
 			{/* Machines List */}
 			<main className="px-4 space-y-2 flex-1 flex flex-col">
@@ -209,9 +181,6 @@ export default function EventsPage() {
 				) : (
 					<>
 						{filteredMachines.map((machine) => {
-							const { untaggedCount, status, signal } = getMachineStatus(machine.id, currentDate, currentShift);
-							const isOnline = status !== "Offline";
-
 							return (
 								<Link
 									key={machine.id}
@@ -264,15 +233,51 @@ export default function EventsPage() {
 					</>
 				)}
 			</main>
-			{/* Floating Action Button - Centered Layout matching Planning Page */}
+			{/* Floating Action Menu */}
 			<div className="fixed bottom-[74px] left-1/2 -translate-x-1/2 z-40 w-full max-w-[480px] pointer-events-none flex flex-col items-end gap-3 pr-4">
-				<Link
-					href="/data/bulk-edit"
-					className="pointer-events-auto size-12 rounded-full bg-primary/90 text-white shadow-xl shadow-primary/20 hover:scale-105 hover:bg-primary active:scale-95 transition-all flex items-center justify-center backdrop-blur-sm"
-					title="Bulk Edit Events"
+				<div
+					className={cn(
+						"flex flex-col items-end gap-3 transition-all duration-200",
+						isFabMenuOpen ? "opacity-100 translate-y-0" : "opacity-0 translate-y-2 pointer-events-none",
+					)}
 				>
-					<span className="material-symbols-outlined text-[22px]">library_add_check</span>
-				</Link>
+					<Link
+						href="/data/bulk-upload"
+						onClick={() => setIsFabMenuOpen(false)}
+						className="pointer-events-auto size-12 rounded-full bg-primary/90 text-white shadow-xl shadow-primary/20 hover:scale-105 hover:bg-primary active:scale-95 transition-all flex items-center justify-center backdrop-blur-sm"
+						title="Bulk Upload Event Reasons"
+					>
+						<span className="material-symbols-outlined text-[22px]">file_upload</span>
+					</Link>
+					<Link
+						href="/data/bulk-download"
+						onClick={() => setIsFabMenuOpen(false)}
+						className="pointer-events-auto size-12 rounded-full bg-primary/90 text-white shadow-xl shadow-primary/20 hover:scale-105 hover:bg-primary active:scale-95 transition-all flex items-center justify-center backdrop-blur-sm"
+						title="Bulk Download Events"
+					>
+						<span className="material-symbols-outlined text-[22px]">file_download</span>
+					</Link>
+					<Link
+						href="/data/bulk-edit"
+						onClick={() => setIsFabMenuOpen(false)}
+						className="pointer-events-auto size-12 rounded-full bg-primary/90 text-white shadow-xl shadow-primary/20 hover:scale-105 hover:bg-primary active:scale-95 transition-all flex items-center justify-center backdrop-blur-sm"
+						title="Bulk Edit Events"
+					>
+						<span className="material-symbols-outlined text-[22px]">edit_note</span>
+					</Link>
+				</div>
+
+				<button
+					type="button"
+					onClick={() => setIsFabMenuOpen((prev) => !prev)}
+					className="pointer-events-auto size-12 rounded-full bg-primary/90 text-white shadow-xl shadow-primary/20 hover:scale-105 hover:bg-primary active:scale-95 transition-all flex items-center justify-center backdrop-blur-sm"
+					title={isFabMenuOpen ? "Close Menu" : "Open Menu"}
+					aria-label={isFabMenuOpen ? "Close menu" : "Open menu"}
+				>
+					<span className={cn("material-symbols-outlined text-[22px] transition-transform", isFabMenuOpen && "rotate-90")}>
+						{isFabMenuOpen ? "close" : "menu"}
+					</span>
+				</button>
 			</div>
 		</div>
 	);

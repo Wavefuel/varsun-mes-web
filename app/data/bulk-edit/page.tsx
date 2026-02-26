@@ -165,7 +165,15 @@ export default function BulkEditPage() {
 	};
 
 	const handleStatusSelect = (status: string) => {
-		setSelectedStatuses((prev) => (prev.includes(status) ? [] : [status]));
+		setSelectedStatuses((prev) => (prev.includes(status) ? prev.filter((s) => s !== status) : [...prev, status]));
+	};
+
+	const handleSelectAllStatuses = () => {
+		setSelectedStatuses([...STATUS_OPTIONS]);
+	};
+
+	const handleClearStatuses = () => {
+		setSelectedStatuses([]);
 	};
 
 	const fetchEvents = async () => {
@@ -342,30 +350,9 @@ export default function BulkEditPage() {
 
 					segments.forEach((seg, idx) => {
 						// Filter: Only show segments whose START TIME is within the selected time period
-						// This ensures we only display events that started during the selected range
+						// Treated as one continuous window from startDate+startTime to endDate+endTime.
 						if (seg.start < queryStartMs) return; // Started before selected period
-						if (seg.start >= queryEndMs) return; // Started after selected period
-
-						// Daily Time Filter: Ensure strictly within the daily time slot (IST)
-						const [sH, sM] = startTime.split(":").map(Number);
-						const [eH, eM] = endTime.split(":").map(Number);
-						const userStartMins = sH * 60 + sM;
-						const userEndMins = eH * 60 + eM;
-
-						// Convert segment start to IST time-of-day
-						// seg.start is UTC timestamp; IST is UTC+5:30
-						const istOffsetMs = 5.5 * 60 * 60 * 1000;
-						const segIstDate = new Date(seg.start + istOffsetMs);
-						const segMins = segIstDate.getUTCHours() * 60 + segIstDate.getUTCMinutes();
-
-						if (userStartMins <= userEndMins) {
-							// Standard range (e.g. 12:00 - 14:00)
-							if (segMins < userStartMins || segMins >= userEndMins) return;
-						} else {
-							// Cross-midnight range (e.g. 22:00 - 02:00)
-							// Reject if it falls in the gap (e.g. 02:00 to 22:00)
-							if (segMins >= userEndMins && segMins < userStartMins) return;
-						}
+						if (seg.start > queryEndMs) return; // Started after selected period
 
 						const segStartIso = new Date(seg.start).toISOString();
 						const segEndIso = new Date(seg.end).toISOString();
@@ -710,6 +697,25 @@ export default function BulkEditPage() {
 												</span>
 											}
 										>
+											<div className="mb-2 flex items-center justify-between">
+												<span className="text-[10px] font-bold text-gray-400 uppercase tracking-wider">
+													Selected {selectedStatuses.length}/{STATUS_OPTIONS.length}
+												</span>
+												<div className="flex items-center gap-2">
+													<button
+														onClick={handleSelectAllStatuses}
+														className="text-[10px] font-bold text-primary uppercase hover:underline"
+													>
+														Select All
+													</button>
+													<button
+														onClick={handleClearStatuses}
+														className="text-[10px] font-bold text-gray-500 uppercase hover:underline"
+													>
+														Clear
+													</button>
+												</div>
+											</div>
 											<div className="flex flex-wrap gap-2">
 												{STATUS_OPTIONS.map((st) => (
 													<button
